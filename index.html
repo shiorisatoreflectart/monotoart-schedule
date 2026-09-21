@@ -195,6 +195,8 @@ dialog h2{margin:0;font-size:16px}
       {id:'c-corporate', name:'企業案件', color:'company', cat:'company'},
       {id:'c-season', name:'シーズン関連', color:'company', cat:'company'},
       {id:'c-atelier', name:'アトリエ案件', color:'company', cat:'company'}]}]},
+    {id:'snsall', name:'SNS', groups:[{id:'snsall', name:'SNS', rows:[
+      {id:'sns-all', name:'SNS総合', color:'sns', cat:'sns', label:['SNS','SNS総合']}]}]},
     {id:'stores', name:'店舗', groups: STORES.map(([id,name]) => ({id:'s-'+id, store:id, name, rows:[
       {id:`s-${id}-sns`, name:'SNS', color:'sns', cat:'sns'},
       {id:`s-${id}-bldg`, name:'館・ワークショップ', color:'bldg', cat:'bldg'}]}))},
@@ -230,7 +232,7 @@ dialog h2{margin:0;font-size:16px}
   const API_URL = 'https://script.google.com/macros/s/AKfycbzIPIeLhKszG5J5_PkLosDF2aQpkiNiD2xtUsESvmjgAggbM1tqN1tiwJJAikvF6RvN/exec';
 
   const CAT_LABEL = {company:'社内イベント', sns:'店舗SNS', bldg:'館・ワークショップ', brand:'ブランド'};
-  const labelsOf = r => [CAT_LABEL[r.cat], (r.cat === 'sns' || r.cat === 'bldg') ? r.group.name : r.name];
+  const labelsOf = r => r.label || [CAT_LABEL[r.cat], r.group.store ? r.group.name : r.name];
   const LOOKUP = {};
   Object.values(ROW).forEach(r => { const [a,b] = labelsOf(r); LOOKUP[a + '|' + b] = r.id; if (r.cat === 'bldg') LOOKUP['館|' + b] = r.id; });
 
