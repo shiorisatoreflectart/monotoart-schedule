@@ -196,7 +196,11 @@ dialog h2{margin:0;font-size:16px}
       {id:'c-season', name:'シーズン関連', color:'company', cat:'company'},
       {id:'c-atelier', name:'アトリエ案件', color:'company', cat:'company'}]}]},
     {id:'snsall', name:'SNS', groups:[{id:'snsall', name:'SNS', rows:[
-      {id:'sns-all', name:'SNS総合', color:'sns', cat:'sns', label:['SNS','SNS総合']}]}]},
+      {id:'sns-all', name:'SNS総合', color:'sns', cat:'sns', label:['SNS','SNS総合']},
+      {id:'sns-ig', name:'Instagram', color:'sns', cat:'sns', label:['SNS','Instagram']},
+      {id:'sns-tt', name:'TikTok', color:'sns', cat:'sns', label:['SNS','TikTok']},
+      {id:'sns-yt', name:'YouTube', color:'sns', cat:'sns', label:['SNS','YouTube']},
+      {id:'sns-ad', name:'広告', color:'sns', cat:'sns', label:['SNS','広告']}]}]},
     {id:'stores', name:'店舗', groups: STORES.map(([id,name]) => ({id:'s-'+id, store:id, name, rows:[
       {id:`s-${id}-sns`, name:'SNS', color:'sns', cat:'sns'},
       {id:`s-${id}-bldg`, name:'館・ワークショップ', color:'bldg', cat:'bldg'}]}))},
