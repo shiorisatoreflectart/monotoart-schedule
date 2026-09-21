@@ -54,6 +54,18 @@ header.top{padding:14px 20px 10px;display:flex;flex-wrap:wrap;align-items:flex-e
 .chip[aria-pressed="false"] i{background:transparent;border:1.5px solid var(--c)}
 label.sel{display:inline-flex;align-items:center;gap:6px;color:var(--muted)}
 label.sel select{border:1px solid var(--line-strong);border-radius:6px;padding:5px 8px;background:var(--surface)}
+.storepick{position:relative}
+.storepick summary{list-style:none;cursor:pointer;border:1px solid var(--line-strong);border-radius:6px;padding:5px 10px;background:var(--surface);display:inline-flex;gap:6px;align-items:center}
+.storepick summary::-webkit-details-marker{display:none}
+.storepick summary::after{content:"▾";color:var(--muted)}
+.storepick .panel{position:absolute;z-index:20;top:calc(100% + 4px);left:0;background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.15);padding:8px;min-width:220px;display:grid;gap:2px}
+.checks label{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:5px;cursor:pointer}
+.checks label:hover{background:var(--weekend)}
+.checks input, .f .checks input{width:16px;height:16px;flex:none;margin:0;padding:0;accent-color:var(--c-company)}
+.checks label{text-align:left;line-height:1.3}
+.checks .all{border-bottom:1px solid var(--line);margin-bottom:2px;font-weight:700}
+.storebox{border:1px solid var(--line-strong);border-radius:6px;padding:4px;display:grid;grid-template-columns:1fr 1fr;gap:0 4px;max-height:220px;overflow:auto}
+.storebox .all{grid-column:1/-1}
 .status{margin-left:auto;color:var(--muted);font-size:12px}
 .status.warn{color:var(--sun)}
 
@@ -136,9 +148,9 @@ dialog h2{margin:0;font-size:16px}
 </header>
 <div class="filters">
   <div class="chips" id="chips"></div>
-  <label class="sel">店舗で絞り込み
-    <select id="storeSel"></select>
-  </label>
+  <div class="sel">店舗で絞り込み
+    <details class="storepick" id="storePick"><summary id="storeSum">全店舗</summary><div class="panel checks" id="storePanel"></div></details>
+  </div>
   <div class="status" id="status">読み込み中…</div>
 </div>
 <div class="scroller" id="scroller"><div class="grid" id="grid"></div></div>
@@ -147,6 +159,7 @@ dialog h2{margin:0;font-size:16px}
   <form method="dialog" id="form">
     <h2 id="dlgTitle">予定を追加</h2>
     <label class="f"><span>区分</span><select id="fRow" required></select></label>
+    <div class="f" id="fStoresWrap" hidden><span>店舗（複数選択できます）</span><div class="storebox checks" id="fStores"></div></div>
     <label class="f"><span>内容</span><input id="fTitle" required maxlength="80" placeholder="例：秋の新作発売、館全館セール"></label>
     <div class="pair">
       <label class="f"><span>開始日</span><input type="date" id="fStart" required></label>
@@ -172,8 +185,8 @@ dialog h2{margin:0;font-size:16px}
   ];
   const CATS = [
     {id:'company', name:'社内イベント', color:'company'},
-    {id:'sns', name:'店舗SNS', color:'sns'},
-    {id:'bldg', name:'館', color:'bldg'},
+    {id:'sns', name:'SNS', color:'sns'},
+    {id:'bldg', name:'館・ワークショップ', color:'bldg'},
     {id:'brand', name:'ブランド', color:'tegaki'}
   ];
   const SECTIONS = [
@@ -184,7 +197,7 @@ dialog h2{margin:0;font-size:16px}
       {id:'c-atelier', name:'アトリエ案件', color:'company', cat:'company'}]}]},
     {id:'stores', name:'店舗', groups: STORES.map(([id,name]) => ({id:'s-'+id, store:id, name, rows:[
       {id:`s-${id}-sns`, name:'SNS', color:'sns', cat:'sns'},
-      {id:`s-${id}-bldg`, name:'館', color:'bldg', cat:'bldg'}]}))},
+      {id:`s-${id}-bldg`, name:'館・ワークショップ', color:'bldg', cat:'bldg'}]}))},
     {id:'brand', name:'ブランド', groups:[{id:'brand', name:'ブランド', rows:[
       {id:'b-tegaki', name:'手描きプロジェクト', color:'tegaki', cat:'brand'},
       {id:'b-ayano', name:'ayanofukumura', color:'ayano', cat:'brand'},
@@ -206,25 +219,25 @@ dialog h2{margin:0;font-size:16px}
   const state = {
     y: now.getFullYear(), m: now.getMonth(),
     months: [1,3,6].includes(prefs.months) ? prefs.months : 1,
-    store: prefs.store || 'all',
+    stores: new Set(Array.isArray(prefs.stores) ? prefs.stores : []),
     hidden: new Set(Array.isArray(prefs.hidden) ? prefs.hidden : []),
     events: [], mode: 'pending', readOnly: false
   };
-  const savePrefs = () => { try { localStorage.setItem('mta-prefs', JSON.stringify({months:state.months, store:state.store, hidden:[...state.hidden]})); } catch {} };
+  const savePrefs = () => { try { localStorage.setItem('mta-prefs', JSON.stringify({months:state.months, stores:[...state.stores], hidden:[...state.hidden]})); } catch {} };
 
   // ---------- persistence (Google スプレッドシート / Apps Script) ----------
   // ▼ セットアップ手順の「5」でコピーした Apps Script のURLをここに貼り付けてください
   const API_URL = 'https://script.google.com/macros/s/AKfycbzIPIeLhKszG5J5_PkLosDF2aQpkiNiD2xtUsESvmjgAggbM1tqN1tiwJJAikvF6RvN/exec';
 
-  const CAT_LABEL = {company:'社内イベント', sns:'店舗SNS', bldg:'館', brand:'ブランド'};
+  const CAT_LABEL = {company:'社内イベント', sns:'店舗SNS', bldg:'館・ワークショップ', brand:'ブランド'};
   const labelsOf = r => [CAT_LABEL[r.cat], (r.cat === 'sns' || r.cat === 'bldg') ? r.group.name : r.name];
   const LOOKUP = {};
-  Object.values(ROW).forEach(r => { const [a,b] = labelsOf(r); LOOKUP[a + '|' + b] = r.id; });
+  Object.values(ROW).forEach(r => { const [a,b] = labelsOf(r); LOOKUP[a + '|' + b] = r.id; if (r.cat === 'bldg') LOOKUP['館|' + b] = r.id; });
 
   const LOCAL_KEY = 'mta-events';
   const KEY_STORE = 'mta-key';
   function setStatus(t, warn){ const s = $('status'); s.textContent = t; s.classList.toggle('warn', !!warn); }
-  function loadLocal(){ try { state.events = JSON.parse(localStorage.getItem(LOCAL_KEY)||'[]'); } catch { state.events = []; } }
+  function loadLocal(){ try { state.events = JSON.parse(localStorage.getItem(LOCAL_KEY)||'[]').map(e => e.rows ? e : {...e, rows:[e.row]}); } catch { state.events = []; } }
   function saveLocal(){ try { localStorage.setItem(LOCAL_KEY, JSON.stringify(state.events)); } catch {} }
   const getKey = () => { try { return localStorage.getItem(KEY_STORE) || ''; } catch { return ''; } };
   const setKey = v => { try { v ? localStorage.setItem(KEY_STORE, v) : localStorage.removeItem(KEY_STORE); } catch {} };
@@ -239,9 +252,9 @@ dialog h2{margin:0;font-size:16px}
       if (!data.ok) throw new Error(data.error || 'error');
       let unknown = 0;
       state.events = data.events.map(e => {
-        const row = LOOKUP[e.cat + '|' + e.target];
-        if (!row) { unknown++; return null; }
-        return {id:e.id, row, title:e.title, start:e.start, end:e.end, memo:e.memo};
+        const rows = String(e.target).split(/[、,，]/).map(t => LOOKUP[e.cat + '|' + t.trim()]).filter(Boolean);
+        if (!rows.length) { unknown++; return null; }
+        return {id:e.id, rows, title:e.title, start:e.start, end:e.end, memo:e.memo};
       }).filter(Boolean);
       const t = new Date();
       setStatus(unknown
@@ -285,7 +298,8 @@ dialog h2{margin:0;font-size:16px}
 
   async function persist(ev){
     if (state.mode === 'remote') {
-      const [cat, target] = labelsOf(ROW[ev.row]);
+      const cat = labelsOf(ROW[ev.rows[0]])[0];
+      const target = ev.rows.map(id => labelsOf(ROW[id])[1]).join('、');
       await post({action:'save', event:{id:ev.id||'', cat, target, title:ev.title, start:ev.start, end:ev.end, memo:ev.memo}});
       await load();
     } else {
@@ -330,13 +344,13 @@ dialog h2{margin:0;font-size:16px}
       b.onclick = () => { state.hidden.has(c.id) ? state.hidden.delete(c.id) : state.hidden.add(c.id); savePrefs(); render(); };
       $('chips').append(b);
     });
-    const sel = $('storeSel');
-    if (!sel.options.length) {
-      sel.add(new Option('全店舗', 'all'));
-      STORES.forEach(([id,name]) => sel.add(new Option(name, id)));
-      sel.onchange = () => { state.store = sel.value; savePrefs(); render(); };
+    const panel = $('storePanel');
+    if (!panel.childElementCount) {
+      buildChecks(panel, state.stores.size ? [...state.stores] : STORES.map(x => x[0]), ids => { state.stores = new Set(ids); savePrefs(); render(); }, '全店舗');
     }
-    sel.value = state.store;
+    const n = state.stores.size;
+    $('storeSum').textContent = n === 0 || n === STORES.length ? '全店舗'
+      : n === 1 ? STORES.find(s => state.stores.has(s[0]))[1] : `${n}店舗を表示中`;
   }
 
   // ---------- gantt ----------
@@ -406,7 +420,7 @@ dialog h2{margin:0;font-size:16px}
 
     SECTIONS.forEach(sec => {
       const groups = sec.groups
-        .filter(g => !g.store || state.store === 'all' || state.store === g.store)
+        .filter(g => !g.store || state.stores.size === 0 || state.stores.has(g.store))
         .map(g => ({...g, rows: g.rows.filter(r => !state.hidden.has(r.cat))}))
         .filter(g => g.rows.length);
       if (!groups.length) return;
@@ -427,7 +441,7 @@ dialog h2{margin:0;font-size:16px}
           rl.innerHTML = '<i></i>'; rl.append(r.name);
           const tr = document.createElement('div'); tr.className = 'track';
           tr.style.width = W + 'px'; tr.style.background = gridLine; tr.dataset.row = r.id;
-          const evs = state.events.filter(e => e.row === r.id && e.start && e.end && e.start <= eStr && e.end >= sStr);
+          const evs = state.events.filter(e => e.rows.includes(r.id) && e.start && e.end && e.start <= eStr && e.end >= sStr);
           const placed = lanes(evs);
           const nl = Math.max(1, ...placed.map(p => p.lane + 1));
           tr.style.height = (nl*28 + 6) + 'px';
@@ -443,7 +457,8 @@ dialog h2{margin:0;font-size:16px}
             bar.style.left = (x + 1) + 'px'; bar.style.width = Math.max(6, w - 2) + 'px'; bar.style.top = (4 + lane*28) + 'px';
             bar.textContent = ev.title;
             const dr = ev.start === ev.end ? md(ev.start) : `${md(ev.start)}〜${md(ev.end)}`;
-            bar.title = `${ev.title}\n${dr}${ev.memo ? '\n' + ev.memo : ''}`;
+            const multi = ev.rows.length > 1 ? `\n共通：${ev.rows.map(id => ROW[id].group.name).join('、')}` : '';
+            bar.title = `${ev.title}\n${dr}${multi}${ev.memo ? '\n' + ev.memo : ''}`;
             bar.onclick = e => { e.stopPropagation(); openDialog(ev); };
             tr.append(bar);
           });
@@ -484,7 +499,7 @@ dialog h2{margin:0;font-size:16px}
       if (s === null) return;
       const c = idx(e), a = Math.min(s,c), b = Math.max(s,c);
       s = null; ghost && ghost.remove(); ghost = null;
-      if (e.type === 'pointerup') openDialog({row: rowId, start: fmt(start + a*DAY), end: fmt(start + b*DAY), title:'', memo:''});
+      if (e.type === 'pointerup') openDialog({rows: [rowId], start: fmt(start + a*DAY), end: fmt(start + b*DAY), title:'', memo:''});
     };
     tr.addEventListener('pointerup', finish);
     tr.addEventListener('pointercancel', finish);
@@ -493,21 +508,51 @@ dialog h2{margin:0;font-size:16px}
   // ---------- dialog ----------
   const dlg = $('dlg');
   let editing = null;
+  // 区分の選択肢：社内・ブランドは行ID、店舗は種類（SNS／館・ワークショップ）を選んでから店舗を複数選択
   function fillRowSelect(){
     const sel = $('fRow'); if (sel.options.length) return;
-    SECTIONS.forEach(sec => sec.groups.forEach(g => {
-      const og = document.createElement('optgroup');
-      og.label = sec.id === 'stores' ? g.name : g.name;
-      g.rows.forEach(r => og.append(new Option(sec.id === 'stores' ? `${g.name}：${r.name}` : r.name, r.id)));
+    SECTIONS.forEach(sec => {
+      const og = document.createElement('optgroup'); og.label = sec.name;
+      if (sec.id === 'stores') sec.groups[0].rows.forEach(r => og.append(new Option(`店舗：${r.name}`, 'store:' + r.cat)));
+      else sec.groups.forEach(g => g.rows.forEach(r => og.append(new Option(r.name, r.id))));
       sel.append(og);
-    }));
+    });
+    sel.addEventListener('change', syncStoreBox);
+    buildChecks($('fStores'), [], () => {}, 'すべての店舗');
   }
+  function buildChecks(box, checked, onChange, allLabel){
+    box.innerHTML = '';
+    const mk = (val, text, cls) => {
+      const l = document.createElement('label'); if (cls) l.className = cls;
+      const c = document.createElement('input'); c.type = 'checkbox'; c.value = val;
+      l.append(c, text); box.append(l); return c;
+    };
+    const all = mk('', allLabel, 'all');
+    const items = STORES.map(([id,name]) => { const c = mk(id, name); c.checked = checked.includes(id); return c; });
+    const sync = () => { const n = items.filter(c => c.checked).length; all.checked = n === items.length; all.indeterminate = n > 0 && n < items.length; };
+    const emit = () => { const ids = items.filter(c => c.checked).map(c => c.value); onChange(ids.length === items.length && box.id === 'storePanel' ? [] : ids); };
+    all.onchange = () => { items.forEach(c => c.checked = all.checked); sync(); emit(); };
+    items.forEach(c => c.onchange = () => { sync(); emit(); });
+    box.setChecked = ids => { items.forEach(c => c.checked = ids.includes(c.value)); sync(); };
+    box.getChecked = () => items.filter(c => c.checked).map(c => c.value);
+    sync();
+  }
+  function syncStoreBox(){ $('fStoresWrap').hidden = !$('fRow').value.startsWith('store:'); }
   function openDialog(ev){
     fillRowSelect();
     editing = ev.id ? ev : null;
     $('dlgTitle').textContent = editing ? '予定を編集' : '予定を追加';
-    const def = state.store !== 'all' ? `s-${state.store}-sns` : 'c-newstore';
-    $('fRow').value = ev.row || def;
+    let rows = ev.rows && ev.rows.length ? ev.rows : null;
+    if (!rows) rows = state.stores.size ? [...state.stores].map(id => `s-${id}-sns`) : ['c-newstore'];
+    const first = ROW[rows[0]];
+    if (first.group.store) {
+      $('fRow').value = 'store:' + first.cat;
+      $('fStores').setChecked(rows.map(id => ROW[id].group.store));
+    } else {
+      $('fRow').value = first.id;
+      $('fStores').setChecked([]);
+    }
+    syncStoreBox();
     $('fTitle').value = ev.title || '';
     $('fStart').value = ev.start || fmt(TODAY);
     $('fEnd').value = ev.end || ev.start || fmt(TODAY);
@@ -521,8 +566,11 @@ dialog h2{margin:0;font-size:16px}
   $('cancelBtn').onclick = () => dlg.close();
   $('form').addEventListener('submit', async e => {
     e.preventDefault();
+    const kind = $('fRow').value;
+    const rows = kind.startsWith('store:') ? $('fStores').getChecked().map(id => `s-${id}-${kind.slice(6)}`) : [kind];
+    if (!rows.length) { $('fErr').textContent = '店舗を1つ以上選んでください。'; return; }
     const ev = {
-      row: $('fRow').value, title: $('fTitle').value.trim(),
+      rows, title: $('fTitle').value.trim(),
       start: $('fStart').value, end: $('fEnd').value, memo: $('fMemo').value.trim(),
       updatedAt: new Date().toISOString()
     };
@@ -561,6 +609,7 @@ dialog h2{margin:0;font-size:16px}
     const x = (TODAY - start)/DAY * dayWidth(days);
     $('scroller').scrollLeft = Math.max(0, x - 60);
   }
+  document.addEventListener('click', e => { const d = $('storePick'); if (d.open && !d.contains(e.target)) d.open = false; });
   let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(render, 120); });
 
   render();
