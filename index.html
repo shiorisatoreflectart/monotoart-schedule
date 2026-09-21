@@ -11,20 +11,20 @@
 :root{
   --bg:#F5F6F9; --surface:#FFFFFF; --ink:#1D2130; --muted:#697084; --line:#E2E5EC; --line-strong:#C9CED9;
   --weekend:#EEF0F5; --sat:#3E63B8; --sun:#C8423F; --today:#E0457B; --ghost:rgba(52,68,122,.18);
-  --c-company:#34447A; --c-sns:#CC4A7C; --c-bldg:#4A8757; --c-tegaki:#C08412; --c-ayano:#7E57B0; --c-glass:#23909B; --c-artist:#A0643A;
+  --c-company:#34447A; --c-sns:#CC4A7C; --c-snsall:#7A2E8F; --c-bldg:#4A8757; --c-tegaki:#C08412; --c-ayano:#7E57B0; --c-glass:#23909B; --c-artist:#A0643A;
   --lg:120px; --lr:118px;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
     --bg:#15171D; --surface:#1D2028; --ink:#E7E9EF; --muted:#9AA0B2; --line:#2C303B; --line-strong:#3D4250;
     --weekend:#23262F; --sat:#86A6F0; --sun:#F08A87; --today:#FF6C9C; --ghost:rgba(134,166,240,.25);
-    --c-company:#6D80C8; --c-sns:#E0679A; --c-bldg:#5FA36E; --c-tegaki:#D39A2A; --c-ayano:#9C77D0; --c-glass:#35AAB5; --c-artist:#BD7D50;
+    --c-company:#6D80C8; --c-sns:#E0679A; --c-snsall:#B070C8; --c-bldg:#5FA36E; --c-tegaki:#D39A2A; --c-ayano:#9C77D0; --c-glass:#35AAB5; --c-artist:#BD7D50;
   }
 }
 :root[data-theme="dark"]{
   --bg:#15171D; --surface:#1D2028; --ink:#E7E9EF; --muted:#9AA0B2; --line:#2C303B; --line-strong:#3D4250;
   --weekend:#23262F; --sat:#86A6F0; --sun:#F08A87; --today:#FF6C9C; --ghost:rgba(134,166,240,.25);
-  --c-company:#6D80C8; --c-sns:#E0679A; --c-bldg:#5FA36E; --c-tegaki:#D39A2A; --c-ayano:#9C77D0; --c-glass:#35AAB5; --c-artist:#BD7D50;
+  --c-company:#6D80C8; --c-sns:#E0679A; --c-snsall:#B070C8; --c-bldg:#5FA36E; --c-tegaki:#D39A2A; --c-ayano:#9C77D0; --c-glass:#35AAB5; --c-artist:#BD7D50;
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%}
@@ -196,7 +196,7 @@ dialog h2{margin:0;font-size:16px}
       {id:'c-season', name:'シーズン関連', color:'company', cat:'company'},
       {id:'c-atelier', name:'アトリエ案件', color:'company', cat:'company'}]}]},
     {id:'snsall', name:'SNS', groups:[{id:'snsall', name:'SNS', rows:[
-      {id:'sns-all', name:'SNS総合', color:'sns', cat:'sns', label:['SNS','SNS総合']},
+      {id:'sns-all', name:'SNS総合', color:'snsall', cat:'sns', label:['SNS','SNS総合']},
       {id:'sns-ig', name:'Instagram', color:'sns', cat:'sns', label:['SNS','Instagram']},
       {id:'sns-tt', name:'TikTok', color:'sns', cat:'sns', label:['SNS','TikTok']},
       {id:'sns-yt', name:'YouTube', color:'sns', cat:'sns', label:['SNS','YouTube']},
@@ -212,6 +212,7 @@ dialog h2{margin:0;font-size:16px}
   ];
   const ROW = {};
   SECTIONS.forEach(s => s.groups.forEach(g => g.rows.forEach(r => ROW[r.id] = {...r, group:g})));
+  const SNS_CHILD = new Set(['sns-ig','sns-tt','sns-yt','sns-ad']);
 
   const $ = id => document.getElementById(id);
   const DAY = 864e5, WD = ['日','月','火','水','木','金','土'];
@@ -447,7 +448,7 @@ dialog h2{margin:0;font-size:16px}
           rl.innerHTML = '<i></i>'; rl.append(r.name);
           const tr = document.createElement('div'); tr.className = 'track';
           tr.style.width = W + 'px'; tr.style.background = gridLine; tr.dataset.row = r.id;
-          const evs = state.events.filter(e => e.rows.includes(r.id) && e.start && e.end && e.start <= eStr && e.end >= sStr);
+          const evs = state.events.filter(e => (r.id === 'sns-all' ? e.rows.some(id => SNS_CHILD.has(id) || id === 'sns-all') : e.rows.includes(r.id)) && e.start && e.end && e.start <= eStr && e.end >= sStr);
           const placed = lanes(evs);
           const nl = Math.max(1, ...placed.map(p => p.lane + 1));
           tr.style.height = (nl*28 + 6) + 'px';
@@ -461,10 +462,11 @@ dialog h2{margin:0;font-size:16px}
             if (ev.memo) bar.classList.add('memo');
             bar.style.setProperty('--c', `var(--c-${r.color})`);
             bar.style.left = (x + 1) + 'px'; bar.style.width = Math.max(6, w - 2) + 'px'; bar.style.top = (4 + lane*28) + 'px';
-            bar.textContent = ev.title;
+            const via = r.id === 'sns-all' && ev.rows[0] !== 'sns-all' ? ROW[ev.rows[0]].name : '';
+            bar.textContent = via ? `${via}｜${ev.title}` : ev.title;
             const dr = ev.start === ev.end ? md(ev.start) : `${md(ev.start)}〜${md(ev.end)}`;
             const multi = ev.rows.length > 1 ? `\n共通：${ev.rows.map(id => ROW[id].group.name).join('、')}` : '';
-            bar.title = `${ev.title}\n${dr}${multi}${ev.memo ? '\n' + ev.memo : ''}`;
+            bar.title = `${via ? '[' + via + '] ' : ''}${ev.title}\n${dr}${multi}${ev.memo ? '\n' + ev.memo : ''}`;
             bar.onclick = e => { e.stopPropagation(); openDialog(ev); };
             tr.append(bar);
           });
@@ -520,7 +522,7 @@ dialog h2{margin:0;font-size:16px}
     SECTIONS.forEach(sec => {
       const og = document.createElement('optgroup'); og.label = sec.name;
       if (sec.id === 'stores') sec.groups[0].rows.forEach(r => og.append(new Option(`店舗：${r.name}`, 'store:' + r.cat)));
-      else sec.groups.forEach(g => g.rows.forEach(r => og.append(new Option(r.name, r.id))));
+      else sec.groups.forEach(g => g.rows.forEach(r => { if (r.id !== 'sns-all') og.append(new Option(r.name, r.id)); }));
       sel.append(og);
     });
     sel.addEventListener('change', syncStoreBox);
@@ -554,7 +556,13 @@ dialog h2{margin:0;font-size:16px}
     if (first.group.store) {
       $('fRow').value = 'store:' + first.cat;
       $('fStores').setChecked(rows.map(id => ROW[id].group.store));
+    } else if (first.id === 'sns-all' && !editing) {
+      $('fRow').value = 'sns-ig';
+      $('fStores').setChecked([]);
     } else {
+      if (first.id === 'sns-all' && ![...$('fRow').options].some(o => o.value === 'sns-all')) {
+        $('fRow').querySelector('optgroup[label="SNS"]').prepend(new Option('SNS総合（その他）', 'sns-all'));
+      }
       $('fRow').value = first.id;
       $('fStores').setChecked([]);
     }
