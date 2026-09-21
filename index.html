@@ -178,10 +178,10 @@ dialog h2{margin:0;font-size:16px}
   ];
   const SECTIONS = [
     {id:'company', name:'社内', groups:[{id:'company', name:'社内イベント', rows:[
-      {id:'c-atelier', name:'オープンアトリエ', color:'company', cat:'company'},
-      {id:'c-inventory', name:'棚卸し', color:'company', cat:'company'},
-      {id:'c-season', name:'シーズンイベント', color:'company', cat:'company'},
-      {id:'c-pr', name:'企業案件・広報', color:'company', cat:'company'}]}]},
+      {id:'c-newstore', name:'新店関連', color:'company', cat:'company'},
+      {id:'c-corporate', name:'企業案件', color:'company', cat:'company'},
+      {id:'c-season', name:'シーズン関連', color:'company', cat:'company'},
+      {id:'c-atelier', name:'アトリエ案件', color:'company', cat:'company'}]}]},
     {id:'stores', name:'店舗', groups: STORES.map(([id,name]) => ({id:'s-'+id, store:id, name, rows:[
       {id:`s-${id}-sns`, name:'SNS', color:'sns', cat:'sns'},
       {id:`s-${id}-bldg`, name:'館', color:'bldg', cat:'bldg'}]}))},
@@ -506,7 +506,7 @@ dialog h2{margin:0;font-size:16px}
     fillRowSelect();
     editing = ev.id ? ev : null;
     $('dlgTitle').textContent = editing ? '予定を編集' : '予定を追加';
-    const def = state.store !== 'all' ? `s-${state.store}-sns` : 'c-atelier';
+    const def = state.store !== 'all' ? `s-${state.store}-sns` : 'c-newstore';
     $('fRow').value = ev.row || def;
     $('fTitle').value = ev.title || '';
     $('fStart').value = ev.start || fmt(TODAY);
