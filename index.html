@@ -97,6 +97,8 @@ label.sel select{border:1px solid var(--line-strong);border-radius:6px;padding:5
 .row:first-child{border-top:0}
 .rlabel{position:sticky;left:var(--lg);z-index:4;width:var(--lr);flex:none;background:var(--surface);padding:6px 10px;display:flex;align-items:center;gap:6px;border-right:1px solid var(--line-strong);font-size:12px;line-height:1.35;white-space:nowrap;overflow:hidden}
 .rlabel span{overflow:hidden;text-overflow:ellipsis}
+.rlabel a{margin-left:auto;flex:none;color:var(--muted);text-decoration:none;font-size:12px;padding:0 2px;border-radius:4px}
+.rlabel a:hover{color:var(--c-company);background:var(--weekend)}
 .rlabel i{flex:none;width:8px;height:8px;border-radius:2px;background:var(--c)}
 .track{position:relative;flex:none;cursor:cell;min-height:34px}
 .bar{position:absolute;height:24px;border-radius:5px;background:var(--c);color:#fff;font-size:12px;line-height:24px;padding:0 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;z-index:1;border:0;text-align:left;box-shadow:inset 0 -2px 0 rgba(0,0,0,.15)}
@@ -219,6 +221,10 @@ dialog h2{margin:0;font-size:16px}
   ];
   const ROW = {};
   SECTIONS.forEach(s => s.groups.forEach(g => g.rows.forEach(r => ROW[r.id] = {...r, group:g})));
+  // 行ごとのリンク（行の見出しの右に↗が出ます）。増やすときはここに { 行ID: 'URL' } を足してください
+  const ROW_LINKS = {
+    'b-tegaki': 'https://docs.google.com/spreadsheets/d/1tseq6FcgWekBmgNWrD3eSWifA6U5kzOgTt6LaCC2vIM/edit'
+  };
   const SNS_CHILD = new Set(['sns-ig','sns-tt','sns-yt','sns-ad']);
   const STORE_REQ = new Set([...SNS_CHILD, 'line-all']);
 
@@ -455,6 +461,13 @@ dialog h2{margin:0;font-size:16px}
           rl.style.setProperty('--c', `var(--c-${r.color})`);
           if (sec.id !== 'stores') { rl.style.left = '0'; rl.style.width = 'calc(var(--lg) + var(--lr))'; }
           rl.innerHTML = '<i></i>'; const rn = document.createElement('span'); rn.textContent = r.name; rl.append(rn); rl.title = r.full || r.name;
+          if (ROW_LINKS[r.id]) {
+            const a = document.createElement('a');
+            a.href = ROW_LINKS[r.id]; a.target = '_blank'; a.rel = 'noopener';
+            a.textContent = '↗'; a.title = `${r.name}のスプレッドシートを開く`;
+            a.setAttribute('aria-label', `${r.name}のスプレッドシートを開く`);
+            rl.append(a);
+          }
           const tr = document.createElement('div'); tr.className = 'track';
           tr.style.width = W + 'px'; tr.style.background = gridLine; tr.dataset.row = r.id;
           const evs = state.events.filter(e => (r.id === 'sns-all' ? e.rows.some(id => SNS_CHILD.has(id) || id === 'sns-all') : e.rows.includes(r.id)) && e.start && e.end && e.start <= eStr && e.end >= sStr);
