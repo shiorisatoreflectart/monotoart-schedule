@@ -216,14 +216,14 @@ dialog h2{margin:0;font-size:16px}
       {id:'sns-ad', name:'広告', color:'sns', cat:'sns', label:['SNS','広告']}]}]},
     {id:'line', name:'LINE', groups:[{id:'line', name:'LINE', rows:[
       {id:'line-all', name:'LINE', color:'line', cat:'line', label:['LINE','LINE']}]}]},
-    {id:'stores', name:'店舗', groups: STORES.map(([id,name]) => ({id:'s-'+id, store:id, name, rows:[
-      {id:`s-${id}-sns`, name:'SNS', color:'sns', cat:'sns'},
-      {id:`s-${id}-bldg`, name:'館・商品・\nWS', full:'館・商品・WS', color:'bldg', cat:'bldg'}]}))},
     {id:'brand', name:'ブランド', groups:[{id:'brand', name:'ブランド', rows:[
       {id:'b-tegaki', name:'手描きプロジェクト', color:'tegaki', cat:'brand'},
       {id:'b-ayano', name:'ayanofukumura', color:'ayano', cat:'brand'},
       {id:'b-glass', name:'福村硝子', color:'glass', cat:'brand'},
-      {id:'b-artist', name:'作家商品', color:'artist', cat:'brand'}]}]}
+      {id:'b-artist', name:'作家商品', color:'artist', cat:'brand'}]}]},
+    {id:'stores', name:'店舗', groups: STORES.map(([id,name]) => ({id:'s-'+id, store:id, name, rows:[
+      {id:`s-${id}-sns`, name:'SNS', color:'sns', cat:'sns'},
+      {id:`s-${id}-bldg`, name:'館・商品・\nWS', full:'館・商品・WS', color:'bldg', cat:'bldg'}]}))}
   ];
   const ROW = {};
   SECTIONS.forEach(s => s.groups.forEach(g => g.rows.forEach(r => ROW[r.id] = {...r, group:g})));
