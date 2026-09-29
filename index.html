@@ -11,20 +11,20 @@
 :root{
   --bg:#F5F6F9; --surface:#FFFFFF; --ink:#1D2130; --muted:#697084; --line:#E2E5EC; --line-strong:#C9CED9;
   --weekend:#EEF0F5; --sat:#3E63B8; --sun:#C8423F; --today:#E0457B; --ghost:rgba(52,68,122,.18);
-  --c-company:#34447A; --c-sns:#CC4A7C; --c-snsall:#7A2E8F; --c-bldg:#4A8757; --c-tegaki:#C08412; --c-ayano:#7E57B0; --c-glass:#23909B; --c-artist:#A0643A;
+  --c-company:#34447A; --c-sns:#CC4A7C; --c-snsall:#7A2E8F; --c-line:#1E9E52; --c-bldg:#4A8757; --c-tegaki:#C08412; --c-ayano:#7E57B0; --c-glass:#23909B; --c-artist:#A0643A;
   --lg:120px; --lr:118px;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
     --bg:#15171D; --surface:#1D2028; --ink:#E7E9EF; --muted:#9AA0B2; --line:#2C303B; --line-strong:#3D4250;
     --weekend:#23262F; --sat:#86A6F0; --sun:#F08A87; --today:#FF6C9C; --ghost:rgba(134,166,240,.25);
-    --c-company:#6D80C8; --c-sns:#E0679A; --c-snsall:#B070C8; --c-bldg:#5FA36E; --c-tegaki:#D39A2A; --c-ayano:#9C77D0; --c-glass:#35AAB5; --c-artist:#BD7D50;
+    --c-company:#6D80C8; --c-sns:#E0679A; --c-snsall:#B070C8; --c-line:#46BE77; --c-bldg:#5FA36E; --c-tegaki:#D39A2A; --c-ayano:#9C77D0; --c-glass:#35AAB5; --c-artist:#BD7D50;
   }
 }
 :root[data-theme="dark"]{
   --bg:#15171D; --surface:#1D2028; --ink:#E7E9EF; --muted:#9AA0B2; --line:#2C303B; --line-strong:#3D4250;
   --weekend:#23262F; --sat:#86A6F0; --sun:#F08A87; --today:#FF6C9C; --ghost:rgba(134,166,240,.25);
-  --c-company:#6D80C8; --c-sns:#E0679A; --c-snsall:#B070C8; --c-bldg:#5FA36E; --c-tegaki:#D39A2A; --c-ayano:#9C77D0; --c-glass:#35AAB5; --c-artist:#BD7D50;
+  --c-company:#6D80C8; --c-sns:#E0679A; --c-snsall:#B070C8; --c-line:#46BE77; --c-bldg:#5FA36E; --c-tegaki:#D39A2A; --c-ayano:#9C77D0; --c-glass:#35AAB5; --c-artist:#BD7D50;
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -102,6 +102,7 @@ label.sel select{border:1px solid var(--line-strong);border-radius:6px;padding:5
 .bar:hover{filter:brightness(1.08)}
 .bar.cl{border-top-left-radius:0;border-bottom-left-radius:0}
 .bar.cr{border-top-right-radius:0;border-bottom-right-radius:0}
+.bar.ro{background:repeating-linear-gradient(135deg,var(--c),var(--c) 7px,rgba(255,255,255,.22) 7px,rgba(255,255,255,.22) 12px);cursor:default}
 .bar.memo::after{content:"";position:absolute;top:3px;right:3px;width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.85)}
 .ghost{position:absolute;top:4px;bottom:4px;background:var(--ghost);border:1.5px dashed var(--c-company);border-radius:5px;pointer-events:none;z-index:2}
 .empty-hint{padding:10px 20px;color:var(--muted);font-size:12px;background:var(--surface);border-top:1px solid var(--line)}
@@ -160,7 +161,7 @@ dialog h2{margin:0;font-size:16px}
   <form method="dialog" id="form">
     <h2 id="dlgTitle">予定を追加</h2>
     <label class="f"><span>区分</span><select id="fRow" required></select></label>
-    <div class="f" id="fStoresWrap" hidden><span>店舗（複数選択できます）</span><div class="storebox checks" id="fStores"></div></div>
+    <div class="f" id="fStoresWrap" hidden><span id="fStoresLabel">店舗（複数選択できます）</span><div class="storebox checks" id="fStores"></div></div>
     <label class="f"><span>内容</span><input id="fTitle" required maxlength="80" placeholder="例：秋の新作発売、館全館セール"></label>
     <div class="pair">
       <label class="f"><span>開始日</span><input type="date" id="fStart" required></label>
@@ -168,6 +169,7 @@ dialog h2{margin:0;font-size:16px}
     </div>
     <label class="f"><span>メモ（任意）</span><textarea id="fMemo" maxlength="500" placeholder="担当者、投稿時間、搬入時間など"></textarea></label>
     <p class="err" id="fErr"></p>
+    <p id="calNote" hidden style="color:var(--muted);font-size:12px;margin:0">この予定はGoogleカレンダーから読み込んでいます。変更はカレンダー側で行ってください。</p>
     <div class="actions">
       <button type="button" class="btn danger" id="delBtn" hidden>削除</button>
       <span class="sp"></span>
@@ -187,6 +189,7 @@ dialog h2{margin:0;font-size:16px}
   const CATS = [
     {id:'company', name:'社内イベント', color:'company'},
     {id:'sns', name:'SNS', color:'sns'},
+    {id:'line', name:'LINE', color:'line'},
     {id:'bldg', name:'館・ワークショップ', color:'bldg'},
     {id:'brand', name:'ブランド', color:'tegaki'}
   ];
@@ -202,6 +205,8 @@ dialog h2{margin:0;font-size:16px}
       {id:'sns-tt', name:'TikTok', color:'sns', cat:'sns', label:['SNS','TikTok']},
       {id:'sns-yt', name:'YouTube', color:'sns', cat:'sns', label:['SNS','YouTube']},
       {id:'sns-ad', name:'広告', color:'sns', cat:'sns', label:['SNS','広告']}]}]},
+    {id:'line', name:'LINE', groups:[{id:'line', name:'LINE', rows:[
+      {id:'line-all', name:'LINE', color:'line', cat:'line', label:['LINE','LINE']}]}]},
     {id:'stores', name:'店舗', groups: STORES.map(([id,name]) => ({id:'s-'+id, store:id, name, rows:[
       {id:`s-${id}-sns`, name:'SNS', color:'sns', cat:'sns'},
       {id:`s-${id}-bldg`, name:'館・ワークショップ', color:'bldg', cat:'bldg'}]}))},
@@ -214,6 +219,7 @@ dialog h2{margin:0;font-size:16px}
   const ROW = {};
   SECTIONS.forEach(s => s.groups.forEach(g => g.rows.forEach(r => ROW[r.id] = {...r, group:g})));
   const SNS_CHILD = new Set(['sns-ig','sns-tt','sns-yt','sns-ad']);
+  const STORE_REQ = new Set([...SNS_CHILD, 'line-all']);
 
   const $ = id => document.getElementById(id);
   const DAY = 864e5, WD = ['日','月','火','水','木','金','土'];
@@ -237,10 +243,11 @@ dialog h2{margin:0;font-size:16px}
   // ▼ セットアップ手順の「5」でコピーした Apps Script のURLをここに貼り付けてください
   const API_URL = 'https://script.google.com/macros/s/AKfycbzIPIeLhKszG5J5_PkLosDF2aQpkiNiD2xtUsESvmjgAggbM1tqN1tiwJJAikvF6RvN/exec';
 
-  const CAT_LABEL = {company:'社内イベント', sns:'店舗SNS', bldg:'館・ワークショップ', brand:'ブランド'};
+  const CAT_LABEL = {company:'社内イベント', sns:'店舗SNS', line:'LINE', bldg:'館・ワークショップ', brand:'ブランド'};
   const labelsOf = r => r.label || [CAT_LABEL[r.cat], r.group.store ? r.group.name : r.name];
   const LOOKUP = {};
-  Object.values(ROW).forEach(r => { const [a,b] = labelsOf(r); LOOKUP[a + '|' + b] = r.id; if (r.cat === 'bldg') LOOKUP['館|' + b] = r.id; });
+  Object.values(ROW).forEach(r => { const [a,b] = labelsOf(r); LOOKUP[a + '|' + b] = r.id; if (r.cat === 'bldg') LOOKUP['館|' + b] = r.id; if (r.cat === 'sns' && r.group.store) { LOOKUP['SNS|' + b] = r.id; LOOKUP['LINE|' + b] = r.id; }
+    if (r.cat === 'bldg' && r.group.store) ['社内イベント','ブランド'].forEach(c => { LOOKUP[c + '|' + b] = r.id; }); });
 
   const LOCAL_KEY = 'mta-events';
   const KEY_STORE = 'mta-key';
@@ -262,7 +269,7 @@ dialog h2{margin:0;font-size:16px}
       state.events = data.events.map(e => {
         const rows = String(e.target).split(/[、,，]/).map(t => LOOKUP[e.cat + '|' + t.trim()]).filter(Boolean);
         if (!rows.length) { unknown++; return null; }
-        return {id:e.id, rows, title:e.title, start:e.start, end:e.end, memo:e.memo};
+        return {id:e.id, rows, title:e.title, start:e.start, end:e.end, memo:e.memo, src:e.source || ''};
       }).filter(Boolean);
       const t = new Date();
       setStatus(unknown
@@ -461,13 +468,15 @@ dialog h2{margin:0;font-size:16px}
             if (toUTC(ev.start) < start) bar.classList.add('cl');
             if (toUTC(ev.end) > end) bar.classList.add('cr');
             if (ev.memo) bar.classList.add('memo');
+            if (ev.src === 'calendar') bar.classList.add('ro');
             bar.style.setProperty('--c', `var(--c-${r.color})`);
             bar.style.left = (x + 1) + 'px'; bar.style.width = Math.max(6, w - 2) + 'px'; bar.style.top = (4 + lane*28) + 'px';
-            const via = r.id === 'sns-all' && ev.rows[0] !== 'sns-all' ? ROW[ev.rows[0]].name : '';
+            const via = !ROW[ev.rows[0]].group.store && r.id !== ev.rows[0] ? ROW[ev.rows[0]].name : '';
             bar.textContent = via ? `${via}｜${ev.title}` : ev.title;
             const dr = ev.start === ev.end ? md(ev.start) : `${md(ev.start)}〜${md(ev.end)}`;
-            const multi = ev.rows.length > 1 ? `\n共通：${ev.rows.map(id => ROW[id].group.name).join('、')}` : '';
-            bar.title = `${via ? '[' + via + '] ' : ''}${ev.title}\n${dr}${multi}${ev.memo ? '\n' + ev.memo : ''}`;
+            const st = ev.rows.filter(id => ROW[id].group.store).map(id => ROW[id].group.name);
+            const multi = st.length && ev.rows.length > 1 ? `\n${ROW[ev.rows[0]].group.store ? '共通' : '関係店舗'}：${st.join('、')}` : '';
+            bar.title = `${via ? '[' + via + '] ' : ''}${ev.title}\n${dr}${ev.src === 'calendar' ? '\nGoogleカレンダーの予定（編集はカレンダー側で）' : ''}${multi}${ev.memo ? '\n' + ev.memo : ''}`;
             bar.onclick = e => { e.stopPropagation(); openDialog(ev); };
             tr.append(bar);
           });
@@ -546,11 +555,21 @@ dialog h2{margin:0;font-size:16px}
     box.getChecked = () => items.filter(c => c.checked).map(c => c.value);
     sync();
   }
-  function syncStoreBox(){ $('fStoresWrap').hidden = !$('fRow').value.startsWith('store:'); }
+  const storeRowKind = kind => (kind.indexOf('sns-') === 0 || kind === 'line-all') ? 'sns' : 'bldg';
+  function syncStoreBox(){
+    const v = $('fRow').value, isStore = v.startsWith('store:');
+    $('fStoresWrap').hidden = false;
+    $('fStoresLabel').textContent = isStore ? '店舗（複数選択できます）'
+      : `関係する店舗（任意・複数選択できます／各店舗の「${storeRowKind(v) === 'sns' ? 'SNS' : '館・ワークショップ'}」の行にも表示されます）`;
+  }
   function openDialog(ev){
     fillRowSelect();
+    const ro = ev.src === 'calendar';
+    ['fRow','fTitle','fStart','fEnd','fMemo'].forEach(id => $(id).disabled = ro);
+    $('saveBtn').hidden = ro;
+    $('calNote').hidden = !ro;
     editing = ev.id ? ev : null;
-    $('dlgTitle').textContent = editing ? '予定を編集' : '予定を追加';
+    $('dlgTitle').textContent = ro ? 'Googleカレンダーの予定' : editing ? '予定を編集' : '予定を追加';
     let rows = ev.rows && ev.rows.length ? ev.rows : null;
     if (!rows) rows = state.stores.size ? [...state.stores].map(id => `s-${id}-sns`) : ['c-newstore'];
     const first = ROW[rows[0]];
@@ -565,7 +584,7 @@ dialog h2{margin:0;font-size:16px}
         $('fRow').querySelector('optgroup[label="SNS"]').prepend(new Option('SNS総合（その他）', 'sns-all'));
       }
       $('fRow').value = first.id;
-      $('fStores').setChecked([]);
+      $('fStores').setChecked(rows.filter(id => ROW[id].group.store).map(id => ROW[id].group.store));
     }
     syncStoreBox();
     $('fTitle').value = ev.title || '';
@@ -573,7 +592,7 @@ dialog h2{margin:0;font-size:16px}
     $('fEnd').value = ev.end || ev.start || fmt(TODAY);
     $('fMemo').value = ev.memo || '';
     $('fErr').textContent = '';
-    $('delBtn').hidden = !editing;
+    $('delBtn').hidden = !editing || ro;
     dlg.showModal();
     setTimeout(() => $('fTitle').focus(), 0);
   }
@@ -582,7 +601,8 @@ dialog h2{margin:0;font-size:16px}
   $('form').addEventListener('submit', async e => {
     e.preventDefault();
     const kind = $('fRow').value;
-    const rows = kind.startsWith('store:') ? $('fStores').getChecked().map(id => `s-${id}-${kind.slice(6)}`) : [kind];
+    const rows = kind.startsWith('store:') ? $('fStores').getChecked().map(id => `s-${id}-${kind.slice(6)}`)
+      : [kind, ...$('fStores').getChecked().map(id => `s-${id}-${storeRowKind(kind)}`)];
     if (!rows.length) { $('fErr').textContent = '店舗を1つ以上選んでください。'; return; }
     const ev = {
       rows, title: $('fTitle').value.trim(),
