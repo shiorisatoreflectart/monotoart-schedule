@@ -12,7 +12,7 @@
   --bg:#F5F6F9; --surface:#FFFFFF; --ink:#1D2130; --muted:#697084; --line:#E2E5EC; --line-strong:#C9CED9;
   --weekend:#EEF0F5; --sat:#3E63B8; --sun:#C8423F; --today:#E0457B; --ghost:rgba(52,68,122,.18);
   --c-company:#34447A; --c-sns:#CC4A7C; --c-snsall:#7A2E8F; --c-line:#1E9E52; --c-bldg:#4A8757; --c-tegaki:#C08412; --c-ayano:#7E57B0; --c-glass:#23909B; --c-artist:#A0643A;
-  --lg:120px; --lr:118px;
+  --lg:120px; --lr:112px;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
@@ -95,8 +95,9 @@ label.sel select{border:1px solid var(--line-strong);border-radius:6px;padding:5
 .rows{flex:1;min-width:0}
 .row{display:flex;border-top:1px solid var(--line)}
 .row:first-child{border-top:0}
-.rlabel{position:sticky;left:var(--lg);z-index:4;width:var(--lr);flex:none;background:var(--surface);padding:6px 10px;display:flex;align-items:flex-start;gap:6px;border-right:1px solid var(--line-strong);font-size:12px;line-height:1.35}
-.rlabel i{flex:none;width:8px;height:8px;border-radius:2px;margin-top:4px;background:var(--c)}
+.rlabel{position:sticky;left:var(--lg);z-index:4;width:var(--lr);flex:none;background:var(--surface);padding:6px 10px;display:flex;align-items:center;gap:6px;border-right:1px solid var(--line-strong);font-size:12px;line-height:1.35;white-space:nowrap;overflow:hidden}
+.rlabel span{overflow:hidden;text-overflow:ellipsis}
+.rlabel i{flex:none;width:8px;height:8px;border-radius:2px;background:var(--c)}
 .track{position:relative;flex:none;cursor:cell;min-height:34px}
 .bar{position:absolute;height:24px;border-radius:5px;background:var(--c);color:#fff;font-size:12px;line-height:24px;padding:0 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;z-index:1;border:0;text-align:left;box-shadow:inset 0 -2px 0 rgba(0,0,0,.15)}
 .bar:hover{filter:brightness(1.08)}
@@ -121,7 +122,7 @@ dialog h2{margin:0;font-size:16px}
 .err{color:var(--sun);font-size:12px;min-height:1em;margin:0}
 
 @media (max-width:640px){
-  :root{--lg:84px;--lr:92px}
+  :root{--lg:80px;--lr:96px}
   header.top{padding:12px 12px 8px}
   .filters{padding:8px 12px}
   .brandmark h1{font-size:21px}
@@ -209,7 +210,7 @@ dialog h2{margin:0;font-size:16px}
       {id:'line-all', name:'LINE', color:'line', cat:'line', label:['LINE','LINE']}]}]},
     {id:'stores', name:'店舗', groups: STORES.map(([id,name]) => ({id:'s-'+id, store:id, name, rows:[
       {id:`s-${id}-sns`, name:'SNS', color:'sns', cat:'sns'},
-      {id:`s-${id}-bldg`, name:'館・ワークショップ', color:'bldg', cat:'bldg'}]}))},
+      {id:`s-${id}-bldg`, name:'館・WS', full:'館・ワークショップ', color:'bldg', cat:'bldg'}]}))},
     {id:'brand', name:'ブランド', groups:[{id:'brand', name:'ブランド', rows:[
       {id:'b-tegaki', name:'手描きプロジェクト', color:'tegaki', cat:'brand'},
       {id:'b-ayano', name:'ayanofukumura', color:'ayano', cat:'brand'},
@@ -453,7 +454,7 @@ dialog h2{margin:0;font-size:16px}
           const rl = document.createElement('div'); rl.className = 'rlabel';
           rl.style.setProperty('--c', `var(--c-${r.color})`);
           if (sec.id !== 'stores') { rl.style.left = '0'; rl.style.width = 'calc(var(--lg) + var(--lr))'; }
-          rl.innerHTML = '<i></i>'; rl.append(r.name);
+          rl.innerHTML = '<i></i>'; const rn = document.createElement('span'); rn.textContent = r.name; rl.append(rn); rl.title = r.full || r.name;
           const tr = document.createElement('div'); tr.className = 'track';
           tr.style.width = W + 'px'; tr.style.background = gridLine; tr.dataset.row = r.id;
           const evs = state.events.filter(e => (r.id === 'sns-all' ? e.rows.some(id => SNS_CHILD.has(id) || id === 'sns-all') : e.rows.includes(r.id)) && e.start && e.end && e.start <= eStr && e.end >= sStr);
@@ -531,7 +532,7 @@ dialog h2{margin:0;font-size:16px}
     const sel = $('fRow'); if (sel.options.length) return;
     SECTIONS.forEach(sec => {
       const og = document.createElement('optgroup'); og.label = sec.name;
-      if (sec.id === 'stores') sec.groups[0].rows.forEach(r => og.append(new Option(`店舗：${r.name}`, 'store:' + r.cat)));
+      if (sec.id === 'stores') sec.groups[0].rows.forEach(r => og.append(new Option(`店舗：${r.full || r.name}`, 'store:' + r.cat)));
       else sec.groups.forEach(g => g.rows.forEach(r => { if (r.id !== 'sns-all') og.append(new Option(r.name, r.id)); }));
       sel.append(og);
     });
