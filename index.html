@@ -104,6 +104,9 @@ label.sel select{border:1px solid var(--line-strong);border-radius:6px;padding:5
 .track{position:relative;flex:none;cursor:cell;min-height:34px}
 .bar{position:absolute;height:24px;border-radius:5px;background:var(--c);color:#fff;font-size:12px;line-height:24px;padding:0 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;z-index:1;border:0;text-align:left;box-shadow:inset 0 -2px 0 rgba(0,0,0,.15)}
 .bar:hover{filter:brightness(1.08)}
+.bar{cursor:grab;touch-action:none}
+.bar.dragging{cursor:grabbing;opacity:.9;z-index:5}
+.track.droptarget{box-shadow:inset 0 0 0 2px var(--c-company)}
 .bar.cl{border-top-left-radius:0;border-bottom-left-radius:0}
 .bar.cr{border-top-right-radius:0;border-bottom-right-radius:0}
 .bar.ro{background:var(--c);opacity:.82;box-shadow:inset 3px 0 0 rgba(255,255,255,.75),inset 0 -2px 0 rgba(0,0,0,.15);cursor:default}
@@ -226,7 +229,7 @@ dialog h2{margin:0;font-size:16px}
       {id:`s-${id}-bldg`, name:'館・商品・\nWS', full:'館・商品・WS', color:'bldg', cat:'bldg'}]}))}
   ];
   const ROW = {};
-  SECTIONS.forEach(s => s.groups.forEach(g => g.rows.forEach(r => ROW[r.id] = {...r, group:g})));
+  SECTIONS.forEach(s => s.groups.forEach(g => g.rows.forEach(r => ROW[r.id] = {...r, group:g, sec:s.id})));
   // 行ごとのリンク（行の見出しの右に↗が出ます）。増やすときはここに { 行ID: 'URL' } を足してください
   const ROW_LINKS = {
     'b-tegaki': 'https://docs.google.com/spreadsheets/d/1tseq6FcgWekBmgNWrD3eSWifA6U5kzOgTt6LaCC2vIM/edit'
@@ -534,7 +537,7 @@ dialog h2{margin:0;font-size:16px}
             const st = ev.rows.filter(id => ROW[id].group.store).map(id => ROW[id].group.name);
             const multi = st.length && ev.rows.length > 1 ? `\n${ROW[ev.rows[0]].group.store ? '共通' : '関係店舗'}：${st.join('、')}` : '';
             bar.title = `${via ? '[' + via + '] ' : ''}${ev.title}\n${dr}${ev.src === 'calendar' ? '\nGoogleカレンダーの予定（編集はカレンダー側で）' : ''}${multi}${ev.memo ? '\n' + ev.memo : ''}`;
-            bar.onclick = e => { e.stopPropagation(); openDialog(ev); };
+            attachBarDrag(bar, ev, r, dw, start, days);
             tr.append(bar);
           });
           attachDrag(tr, start, dw, days, r.id);
@@ -555,6 +558,64 @@ dialog h2{margin:0;font-size:16px}
     }
   }
   const md = s => { const [,m,d] = s.split('-'); return `${+m}/${+d}`; };
+
+
+  // バーのドラッグ：横に動かすと日付、縦に動かすと同じ大カテゴリー内の行を変更。端をつかむと期間を伸縮
+  function attachBarDrag(bar, ev, row, dw, start, days){
+    if (ev.src === 'calendar') { bar.onclick = e => { e.stopPropagation(); openDialog(ev); }; bar.style.cursor = 'default'; return; }
+    const single = ev.rows.length === 1;
+    let mode = null, sx = 0, sy = 0, moved = false, d = 0, target = null;
+    const left0 = parseFloat(bar.style.left), w0 = parseFloat(bar.style.width);
+    const edge = e => { const r = bar.getBoundingClientRect(); return w0 > 26 && (e.clientX - r.left < 9 ? 'l' : r.right - e.clientX < 9 ? 'r' : 'm') || 'm'; };
+    bar.addEventListener('pointermove', e => { if (!mode) bar.style.cursor = edge(e) === 'm' ? 'grab' : 'ew-resize'; });
+    bar.addEventListener('pointerdown', e => {
+      if (e.button !== 0) return;
+      e.stopPropagation(); e.preventDefault();
+      mode = edge(e); sx = e.clientX; sy = e.clientY; moved = false; d = 0; target = null;
+      bar.setPointerCapture(e.pointerId); bar.classList.add('dragging');
+    });
+    bar.addEventListener('pointermove', e => {
+      if (!mode) return;
+      const dx = e.clientX - sx, dy = e.clientY - sy;
+      if (!moved && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+      moved = true;
+      d = Math.round(dx / dw);
+      if (mode === 'm') {
+        bar.style.left = (left0 + d * dw) + 'px';
+        document.querySelectorAll('.track.droptarget').forEach(t => t.classList.remove('droptarget'));
+        target = null;
+        if (single) {
+          const tr = document.elementsFromPoint(e.clientX, e.clientY).find(el => el.classList && el.classList.contains('track'));
+          const id = tr && tr.dataset.row;
+          if (id && id !== row.id && ROW[id].sec === ROW[row.id].sec) { target = id; tr.classList.add('droptarget'); }
+        }
+      } else if (mode === 'l') {
+        bar.style.left = (left0 + d * dw) + 'px';
+        bar.style.width = Math.max(6, w0 - d * dw) + 'px';
+      } else {
+        bar.style.width = Math.max(6, w0 + d * dw) + 'px';
+      }
+    });
+    const end = async e => {
+      if (!mode) return;
+      const wasMoved = moved, m = mode, shift = d, to = target;
+      mode = null; bar.classList.remove('dragging');
+      document.querySelectorAll('.track.droptarget').forEach(t => t.classList.remove('droptarget'));
+      if (!wasMoved) { openDialog(ev); return; }
+      if (e.type !== 'pointerup') { render(); return; }
+      const mv = (s0, n) => fmt(toUTC(s0) + n * DAY);
+      let st = ev.start, en = ev.end;
+      if (m === 'm') { st = mv(ev.start, shift); en = mv(ev.end, shift); }
+      else if (m === 'l') { st = mv(ev.start, shift); if (st > en) st = en; }
+      else { en = mv(ev.end, shift); if (en < st) en = st; }
+      const rows = to ? [to] : ev.rows;
+      if (st === ev.start && en === ev.end && !to) { render(); return; }
+      try { await persist({...ev, rows, start: st, end: en}); }
+      catch (err) { setStatus(writeErr(err), true); render(); }
+    };
+    bar.addEventListener('pointerup', end);
+    bar.addEventListener('pointercancel', end);
+  }
 
   function attachDrag(tr, start, dw, days, rowId){
     let s = null, ghost = null;
