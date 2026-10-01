@@ -112,6 +112,17 @@ label.sel select{border:1px solid var(--line-strong);border-radius:6px;padding:5
 .bar.ro{background:var(--c);opacity:.82;box-shadow:inset 3px 0 0 rgba(255,255,255,.75),inset 0 -2px 0 rgba(0,0,0,.15);cursor:default}
 .bar.memo::after{content:"";position:absolute;top:3px;right:3px;width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.85)}
 .ghost{position:absolute;top:4px;bottom:4px;background:var(--ghost);border:1.5px dashed var(--c-company);border-radius:5px;pointer-events:none;z-index:2}
+.daylist{padding:18px 20px 40px;max-width:760px}
+.daylist h2{margin:0 0 4px;font-size:20px}
+.daylist .sub{color:var(--muted);font-size:12px;margin:0 0 16px}
+.daygroup{margin-bottom:18px}
+.daygroup h3{font-size:12px;letter-spacing:.06em;color:var(--muted);margin:0 0 6px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+.dayitem{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.dayitem i{flex:none;width:8px;height:8px;border-radius:2px;margin-top:6px;background:var(--c)}
+.dayitem .b{flex:1;min-width:0}
+.dayitem .t{font-weight:700}
+.dayitem .m{color:var(--muted);font-size:12px;white-space:pre-wrap;margin-top:2px}
+.dayitem button{border:0;background:none;color:var(--c-company);font-size:12px;cursor:pointer;padding:0}
 .empty-hint{padding:10px 20px;color:var(--muted);font-size:12px;background:var(--surface);border-top:1px solid var(--line)}
 
 dialog{border:0;border-radius:10px;padding:0;width:min(440px,94vw);background:var(--surface);color:var(--ink);box-shadow:0 20px 50px rgba(0,0,0,.25)}
@@ -152,6 +163,7 @@ dialog h2{margin:0;font-size:16px}
     <div class="seg" role="group" aria-label="表示期間">
       <button data-m="1">1ヶ月</button><button data-m="3">3ヶ月</button><button data-m="6">半年</button>
     </div>
+    <button class="btn" id="shareBtn" title="いま表示している期間・店舗のURLをコピーします">URLを共有</button>
     <button class="btn primary" id="addBtn">予定を追加</button>
   </div>
 </header>
@@ -179,6 +191,7 @@ dialog h2{margin:0;font-size:16px}
     <p id="calNote" hidden style="color:var(--muted);font-size:12px;margin:0">この予定はGoogleカレンダーから読み込んでいます。変更はカレンダー側で行ってください。</p>
     <div class="actions">
       <button type="button" class="btn danger" id="delBtn" hidden>削除</button>
+      <button type="button" class="btn" id="copyBtn" hidden>共有用にコピー</button>
       <span class="sp"></span>
       <button type="button" class="btn" id="cancelBtn">キャンセル</button>
       <button type="submit" class="btn primary" id="saveBtn">保存</button>
@@ -246,11 +259,20 @@ dialog h2{margin:0;font-size:16px}
   const TODAY = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
 
   const prefs = (() => { try { return JSON.parse(localStorage.getItem('mta-prefs')||'{}'); } catch { return {}; } })();
+  // URLの指定（?from=2026-10-01&to=2026-10-31&stores=gransta,ueno&hide=sns）
+  const Q = new URLSearchParams(location.search);
+  const qDate = v => { const m = String(v||'').match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/); return m ? Date.UTC(+m[1], +m[2]-1, +m[3]) : null; };
+  const qFrom = qDate(Q.get('from') || Q.get('date'));
+  const qTo = qDate(Q.get('to')) || qFrom;
+  const qStores = (Q.get('stores') || '').split(',').map(x => x.trim()).filter(Boolean);
+  const qHide = (Q.get('hide') || '').split(',').map(x => x.trim()).filter(Boolean);
   const state = {
     y: now.getFullYear(), m: now.getMonth(),
     months: [1,3,6].includes(prefs.months) ? prefs.months : 1,
-    stores: new Set(Array.isArray(prefs.stores) ? prefs.stores : []),
-    hidden: new Set(Array.isArray(prefs.hidden) ? prefs.hidden : []),
+    event: Q.get('event') || null,
+    from: qFrom, to: qTo, day: (Q.get('day') && /^\d{4}-\d{2}-\d{2}$/.test(Q.get('day'))) ? Q.get('day') : null,
+    stores: new Set(qStores.length ? qStores : (Array.isArray(prefs.stores) ? prefs.stores : [])),
+    hidden: new Set(qHide.length ? qHide : (Array.isArray(prefs.hidden) ? prefs.hidden : [])),
     events: [], mode: 'pending', readOnly: false
   };
   const savePrefs = () => { try { localStorage.setItem('mta-prefs', JSON.stringify({months:state.months, stores:[...state.stores], hidden:[...state.hidden]})); } catch {} };
@@ -382,6 +404,10 @@ dialog h2{margin:0;font-size:16px}
 
   // ---------- range ----------
   function range(){
+    if (state.from) {
+      const start = state.from, end = state.to || state.from;
+      return {start, end, days: Math.round((end - start)/DAY) + 1};
+    }
     const start = Date.UTC(state.y, state.m, 1);
     const end = Date.UTC(state.y, state.m + state.months, 0);
     return {start, end, days: Math.round((end - start)/DAY) + 1};
@@ -397,9 +423,16 @@ dialog h2{margin:0;font-size:16px}
   function renderControls(){
     const {start,end} = range();
     const s = new Date(start), e = new Date(end);
-    $('period').textContent = state.months === 1
-      ? `${s.getUTCFullYear()}年${s.getUTCMonth()+1}月`
-      : `${s.getUTCFullYear()}年${s.getUTCMonth()+1}月〜${e.getUTCFullYear() !== s.getUTCFullYear() ? e.getUTCFullYear()+'年' : ''}${e.getUTCMonth()+1}月`;
+    if (state.event) $('period').textContent = '予定の確認';
+    else if (state.day) {
+      const dd = new Date(toUTC(state.day));
+      $('period').textContent = `${dd.getUTCMonth()+1}月${dd.getUTCDate()}日（${['日','月','火','水','木','金','土'][dd.getUTCDay()]}）`;
+    } else $('period').textContent = state.from
+      ? (start === end ? `${s.getUTCFullYear()}年${s.getUTCMonth()+1}月${s.getUTCDate()}日`
+                       : `${s.getUTCMonth()+1}/${s.getUTCDate()}〜${e.getUTCMonth()+1}/${e.getUTCDate()}`)
+      : state.months === 1
+        ? `${s.getUTCFullYear()}年${s.getUTCMonth()+1}月`
+        : `${s.getUTCFullYear()}年${s.getUTCMonth()+1}月〜${e.getUTCFullYear() !== s.getUTCFullYear() ? e.getUTCFullYear()+'年' : ''}${e.getUTCMonth()+1}月`;
     document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.m === state.months)));
     $('chips').innerHTML = '';
     CATS.forEach(c => {
@@ -421,6 +454,107 @@ dialog h2{margin:0;font-size:16px}
   }
 
   // ---------- gantt ----------
+  const WDJ = ['日','月','火','水','木','金','土'];
+  const jpDate = s0 => { const d = new Date(toUTC(s0)); return `${d.getUTCMonth()+1}月${d.getUTCDate()}日（${WDJ[d.getUTCDay()]}）`; };
+  function eventText(ev){
+    const r = ROW[ev.rows[0]];
+    const where = r.group.store ? `${r.group.name}／${r.full || r.name.replace('\n','')}` : (r.full || r.name);
+    const stores = ev.rows.filter(id => ROW[id].group.store).map(id => ROW[id].group.name);
+    const when = ev.start === ev.end ? jpDate(ev.start) : `${jpDate(ev.start)}〜${jpDate(ev.end)}`;
+    const lines = [`【${where}】${ev.title}`, when];
+    if (stores.length > 1 || (stores.length && !r.group.store)) lines.push(`関係店舗：${stores.join('、')}`);
+    if (ev.memo) lines.push(`メモ：${ev.memo}`);
+    return lines.join('\n');
+  }
+  const eventUrl = ev => location.origin + location.pathname + '?event=' + encodeURIComponent(ev.id);
+
+  function renderEvent(){
+    const grid = $('grid');
+    grid.innerHTML = ''; grid.style.width = '100%';
+    const box = document.createElement('div'); box.className = 'daylist';
+    const ev = state.events.find(e => String(e.id) === String(state.event));
+    if (!ev) {
+      const p = document.createElement('p'); p.className = 'sub';
+      p.textContent = state.mode === 'pending' ? '読み込み中…' : 'この予定は見つかりませんでした（削除された可能性があります）。';
+      box.append(p);
+    } else {
+      const r = ROW[ev.rows[0]];
+      const h = document.createElement('h2'); h.textContent = ev.title;
+      const sub = document.createElement('p'); sub.className = 'sub';
+      sub.textContent = '登録内容の確認';
+      const item = document.createElement('div'); item.className = 'dayitem';
+      item.style.setProperty('--c', `var(--c-${r.color})`);
+      const dot = document.createElement('i');
+      const bd = document.createElement('div'); bd.className = 'b';
+      const m = document.createElement('div'); m.className = 'm';
+      m.textContent = eventText(ev).split('\n').slice(1).join('\n');
+      const where = document.createElement('div'); where.className = 't';
+      where.textContent = r.group.store ? `${r.group.name}／${r.full || r.name.replace('\n','')}` : (r.full || r.name);
+      bd.append(where, m);
+      if (ev.src !== 'calendar') {
+        const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = '編集';
+        edit.onclick = () => openDialog(ev); bd.append(edit);
+      }
+      item.append(dot, bd);
+      const back = document.createElement('p'); back.className = 'sub'; back.style.marginTop = '16px';
+      const a = document.createElement('button'); a.type = 'button'; a.className = 'btn';
+      a.textContent = 'カレンダー全体を見る';
+      a.onclick = () => { state.event = null; const d = new Date(toUTC(ev.start)); state.y = d.getUTCFullYear(); state.m = d.getUTCMonth(); render(); };
+      back.append(a);
+      box.append(h, sub, item, back);
+    }
+    grid.append(box);
+  }
+
+  function renderDay(){
+    const grid = $('grid');
+    grid.innerHTML = ''; grid.style.width = '100%';
+    const d = new Date(toUTC(state.day));
+    const box = document.createElement('div'); box.className = 'daylist';
+    const h = document.createElement('h2');
+    h.textContent = `${d.getUTCFullYear()}年${d.getUTCMonth()+1}月${d.getUTCDate()}日（${WDJ[d.getUTCDay()]}）の予定`;
+    const sub = document.createElement('p'); sub.className = 'sub';
+    const evs = state.events.filter(e => e.start <= state.day && e.end >= state.day);
+    sub.textContent = evs.length ? `${evs.length}件` : '予定はありません';
+    box.append(h, sub);
+    SECTIONS.forEach(sec => {
+      const rows = [];
+      sec.groups.forEach(g => {
+        if (g.store && state.stores.size && !state.stores.has(g.store)) return;
+        g.rows.forEach(r => { if (!state.hidden.has(r.cat)) rows.push({r, g}); });
+      });
+      const items = [];
+      rows.forEach(({r, g}) => evs.forEach(ev => {
+        if (!ev.rows.includes(r.id)) return;
+        if (items.some(x => x.ev.id === ev.id)) return;
+        items.push({ev, r, g});
+      }));
+      if (!items.length) return;
+      const wrap = document.createElement('div'); wrap.className = 'daygroup';
+      const t = document.createElement('h3'); t.textContent = sec.name; wrap.append(t);
+      items.forEach(({ev, r, g}) => {
+        const it = document.createElement('div'); it.className = 'dayitem';
+        it.style.setProperty('--c', `var(--c-${r.color})`);
+        const dot = document.createElement('i');
+        const b = document.createElement('div'); b.className = 'b';
+        const ti = document.createElement('div'); ti.className = 't'; ti.textContent = ev.title;
+        const meta = document.createElement('div'); meta.className = 'm';
+        const where = g.store ? `${g.name}／${r.full || r.name.replace('\n','')}` : (r.full || r.name);
+        const span = ev.start === ev.end ? '' : `　${md(ev.start)}〜${md(ev.end)}`;
+        const stores = ev.rows.filter(id => ROW[id].group.store).map(id => ROW[id].group.name);
+        meta.textContent = where + span + (stores.length > 1 ? `　関係店舗：${stores.join('、')}` : '') + (ev.memo ? `\n${ev.memo}` : '');
+        b.append(ti, meta);
+        if (ev.src !== 'calendar') {
+          const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = '編集';
+          edit.onclick = () => openDialog(ev); b.append(edit);
+        }
+        it.append(dot, b); wrap.append(it);
+      });
+      box.append(wrap);
+    });
+    grid.append(box);
+  }
+
   function lanes(evs){
     const sorted = [...evs].sort((a,b) => a.start.localeCompare(b.start) || b.end.localeCompare(a.end));
     const ends = [];
@@ -433,6 +567,8 @@ dialog h2{margin:0;font-size:16px}
 
   function render(){
     renderControls();
+    if (state.event) return renderEvent();
+    if (state.day) return renderDay();
     const {start, end, days} = range();
     const dw = dayWidth(days);
     const W = dw * days;
@@ -463,6 +599,8 @@ dialog h2{margin:0;font-size:16px}
       if (wd === 6) c.classList.add('sat'); if (wd === 0) c.classList.add('sun');
       if (t === TODAY) c.classList.add('today');
       if (dw >= 14 || d.getUTCDate() === 1 || d.getUTCDate() % 5 === 0) c.textContent = d.getUTCDate();
+      c.style.cursor = 'pointer'; c.title = 'この日の予定だけを一覧表示';
+      c.onclick = () => { state.day = fmt(t); render(); };
       if (dw >= 22) { const s = document.createElement('small'); s.textContent = WD[wd]; c.append(s); }
       if (dw < 12) c.style.borderLeft = d.getUTCDate() === 1 ? '' : '0';
       dayRow.append(c);
@@ -709,8 +847,9 @@ dialog h2{margin:0;font-size:16px}
     $('fStart').value = ev.start || fmt(TODAY);
     $('fEnd').value = ev.end || ev.start || fmt(TODAY);
     $('fMemo').value = ev.memo || '';
-    $('fErr').textContent = '';
+    $('fErr').textContent = ''; $('fErr').style.color = '';
     $('delBtn').hidden = !editing || ro;
+    $('copyBtn').hidden = !editing;
     dlg.showModal();
     setTimeout(() => $('fTitle').focus(), 0);
   }
@@ -736,6 +875,12 @@ dialog h2{margin:0;font-size:16px}
     catch (err) { $('fErr').textContent = writeErr(err); }
     finally { $('saveBtn').disabled = false; }
   });
+  $('copyBtn').onclick = async () => {
+    if (!editing) return;
+    const text = `${eventText(editing)}\n確認はこちら → ${eventUrl(editing)}`;
+    try { await navigator.clipboard.writeText(text); $('fErr').style.color = 'var(--muted)'; $('fErr').textContent = '共有用の文章をコピーしました'; }
+    catch { prompt('この内容をコピーしてください', text); }
+  };
   $('delBtn').onclick = async () => {
     if (!editing || !confirm(`「${editing.title}」を削除しますか？`)) return;
     try { await remove(editing.id); dlg.close(); }
@@ -750,11 +895,30 @@ dialog h2{margin:0;font-size:16px}
   }
 
   // ---------- nav ----------
-  const shift = n => { const d = new Date(Date.UTC(state.y, state.m + n, 1)); state.y = d.getUTCFullYear(); state.m = d.getUTCMonth(); render(); };
+  const shift = n => {
+    if (state.event) $('period').textContent = '予定の確認';
+    else if (state.day) { state.day = fmt(toUTC(state.day) + n * DAY); render(); return; }
+    if (state.from) {
+      const span = Math.round((state.to - state.from)/DAY) + 1;
+      state.from += n * span * DAY; state.to += n * span * DAY; render(); return;
+    }
+    const d = new Date(Date.UTC(state.y, state.m + n, 1)); state.y = d.getUTCFullYear(); state.m = d.getUTCMonth(); render();
+  };
   $('prev').onclick = () => shift(-1);
   $('next').onclick = () => shift(1);
-  $('todayBtn').onclick = () => { state.y = now.getFullYear(); state.m = now.getMonth(); render(); scrollToToday(); };
-  document.querySelectorAll('.seg button').forEach(b => b.onclick = () => { state.months = +b.dataset.m; savePrefs(); render(); scrollToToday(); });
+  $('todayBtn').onclick = () => { state.event = null; state.day = null; state.from = state.to = null; state.y = now.getFullYear(); state.m = now.getMonth(); render(); scrollToToday(); };
+  document.querySelectorAll('.seg button').forEach(b => b.onclick = () => { state.event = null; state.day = null; state.from = state.to = null; state.months = +b.dataset.m; savePrefs(); render(); scrollToToday(); });
+  $('shareBtn').onclick = async () => {
+    const {start, end} = range();
+    const q = new URLSearchParams();
+    if (state.day) q.set('day', state.day);
+    else { q.set('from', fmt(start)); q.set('to', fmt(end)); }
+    if (state.stores.size) q.set('stores', [...state.stores].join(','));
+    if (state.hidden.size) q.set('hide', [...state.hidden].join(','));
+    const url = location.origin + location.pathname + '?' + q.toString();
+    try { await navigator.clipboard.writeText(url); setStatus('この表示のURLをコピーしました'); }
+    catch { prompt('このURLをコピーしてください', url); }
+  };
   $('addBtn').onclick = () => openDialog({start: fmt(TODAY), end: fmt(TODAY)});
   function scrollToToday(){
     const {start, end, days} = range();
