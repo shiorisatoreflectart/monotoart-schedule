@@ -109,7 +109,6 @@ label.sel select{border:1px solid var(--line-strong);border-radius:6px;padding:5
 .track.droptarget{box-shadow:inset 0 0 0 2px var(--c-company)}
 .bar.cl{border-top-left-radius:0;border-bottom-left-radius:0}
 .bar.cr{border-top-right-radius:0;border-bottom-right-radius:0}
-.bar.ro{background:var(--c);opacity:.82;box-shadow:inset 3px 0 0 rgba(255,255,255,.75),inset 0 -2px 0 rgba(0,0,0,.15);cursor:default}
 .bar.memo::after{content:"";position:absolute;top:3px;right:3px;width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.85)}
 .ghost{position:absolute;top:4px;bottom:4px;background:var(--ghost);border:1.5px dashed var(--c-company);border-radius:5px;pointer-events:none;z-index:2}
 .daylist{padding:18px 20px 40px;max-width:760px}
@@ -188,7 +187,6 @@ dialog h2{margin:0;font-size:16px}
     </div>
     <label class="f"><span>メモ（任意）</span><textarea id="fMemo" maxlength="500" placeholder="担当者、投稿時間、搬入時間など"></textarea></label>
     <p class="err" id="fErr"></p>
-    <p id="calNote" hidden style="color:var(--muted);font-size:12px;margin:0">この予定はGoogleカレンダーから読み込んでいます。変更はカレンダー側で行ってください。</p>
     <div class="actions">
       <button type="button" class="btn danger" id="delBtn" hidden>削除</button>
       <button type="button" class="btn" id="copyBtn" hidden>共有用にコピー</button>
@@ -304,53 +302,44 @@ dialog h2{margin:0;font-size:16px}
   const setKey = v => { try { v ? localStorage.setItem(KEY_STORE, v) : localStorage.removeItem(KEY_STORE); } catch {} };
 
   let loading = false;
-  let calEvents = [];
   async function fetchEvents(action, ms){
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), ms);
     try {
-      const res = await fetch(API_URL + '?action=' + action + '&t=' + Date.now(), {signal: ctl.signal});
-      const data = await res.json();
+      const q = action ? '?action=' + action + '&t=' : '?t=';
+      const res = await fetch(API_URL + q + Date.now(), {signal: ctl.signal});
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); }
+      catch { throw new Error(res.ok ? 'Apps Scriptがエラーページを返しました' : 'サーバー応答 ' + res.status); }
       if (!data.ok) throw new Error(data.error || 'error');
       return data.events || [];
     } finally { clearTimeout(timer); }
   }
-  function toRows(list){
-    let unknown = 0;
-    const out = list.map(e => {
-      const rows = String(e.target).split(/[、,，]/).map(t => LOOKUP[e.cat + '|' + t.trim()]).filter(Boolean);
-      if (!rows.length) { unknown++; return null; }
-      return {id:e.id, rows, title:e.title, start:e.start, end:e.end, memo:e.memo, src:e.source || ''};
-    }).filter(Boolean);
-    return {out, unknown};
-  }
-  async function loadCalendar(){
-    try {
-      calEvents = toRows(await fetchEvents('calendar', 60000)).out;
-      state.events = state.events.filter(e => e.src !== 'calendar').concat(calEvents);
-      render();
-    } catch (err) {
-      setStatus('Googleカレンダーの予定を読み込めませんでした（他の予定は表示されています）', true);
-    }
+  // 古いデプロイ（action非対応）でも読めるようにフォールバック
+  async function fetchList(){
+    try { return await fetchEvents('list', 20000); }
+    catch (err) { return await fetchEvents('', 25000); }
   }
   async function load(){
     if (!API_URL || loading) return;
     loading = true;
     try {
-      const data = {ok:true, events: await fetchEvents('list', 20000)};
+      const data = {ok:true, events: await fetchList()};
       let unknown = 0;
       state.events = data.events.map(e => {
         const rows = String(e.target).split(/[、,，]/).map(t => LOOKUP[e.cat + '|' + t.trim()]).filter(Boolean);
         if (!rows.length) { unknown++; return null; }
-        return {id:e.id, rows, title:e.title, start:e.start, end:e.end, memo:e.memo, src:e.source || ''};
-      }).filter(Boolean).concat(calEvents);
+        return {id:e.id, rows, title:e.title, start:e.start, end:e.end, memo:e.memo};
+      }).filter(Boolean);
       const t = new Date();
       setStatus(unknown
         ? `区分・対象が読み取れない予定が${unknown}件あります（スプレッドシートの表記を確認してください）`
         : `スプレッドシートと同期済み（${pad(t.getHours())}:${pad(t.getMinutes())}）`, unknown > 0);
       render();
     } catch (err) {
-      setStatus('予定を読み込めませんでした。通信状況とAPIのURLを確認してください', true);
+      const why = err && err.name === 'AbortError' ? '応答がありませんでした（時間切れ）' : (err && err.message) || '原因不明';
+      setStatus('予定を読み込めませんでした：' + why, true);
     } finally { loading = false; }
   }
 
@@ -380,7 +369,6 @@ dialog h2{margin:0;font-size:16px}
     }
     state.mode = 'remote';
     await load();
-    loadCalendar();
     setInterval(() => { if (document.visibilityState === 'visible') load(); }, 60000);
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') load(); });
   }
@@ -491,10 +479,8 @@ dialog h2{margin:0;font-size:16px}
       const where = document.createElement('div'); where.className = 't';
       where.textContent = r.group.store ? `${r.group.name}／${r.full || r.name.replace('\n','')}` : (r.full || r.name);
       bd.append(where, m);
-      if (ev.src !== 'calendar') {
-        const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = '編集';
-        edit.onclick = () => openDialog(ev); bd.append(edit);
-      }
+      const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = '編集';
+      edit.onclick = () => openDialog(ev); bd.append(edit);
       item.append(dot, bd);
       const back = document.createElement('p'); back.className = 'sub'; back.style.marginTop = '16px';
       const a = document.createElement('button'); a.type = 'button'; a.className = 'btn';
@@ -544,10 +530,8 @@ dialog h2{margin:0;font-size:16px}
         const stores = ev.rows.filter(id => ROW[id].group.store).map(id => ROW[id].group.name);
         meta.textContent = where + span + (stores.length > 1 ? `　関係店舗：${stores.join('、')}` : '') + (ev.memo ? `\n${ev.memo}` : '');
         b.append(ti, meta);
-        if (ev.src !== 'calendar') {
-          const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = '編集';
-          edit.onclick = () => openDialog(ev); b.append(edit);
-        }
+        const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = '編集';
+        edit.onclick = () => openDialog(ev); b.append(edit);
         it.append(dot, b); wrap.append(it);
       });
       box.append(wrap);
@@ -666,15 +650,14 @@ dialog h2{margin:0;font-size:16px}
             if (toUTC(ev.start) < start) bar.classList.add('cl');
             if (toUTC(ev.end) > end) bar.classList.add('cr');
             if (ev.memo) bar.classList.add('memo');
-            if (ev.src === 'calendar') bar.classList.add('ro');
             bar.style.setProperty('--c', `var(--c-${r.color})`);
             bar.style.left = (x + 1) + 'px'; bar.style.width = Math.max(6, w - 2) + 'px'; bar.style.top = (4 + lane*28) + 'px';
             const via = !ROW[ev.rows[0]].group.store && r.id !== ev.rows[0] ? ROW[ev.rows[0]].name : '';
-            bar.textContent = (ev.src === 'calendar' ? '📅 ' : '') + (via ? `${via}｜${ev.title}` : ev.title);
+            bar.textContent = via ? `${via}｜${ev.title}` : ev.title;
             const dr = ev.start === ev.end ? md(ev.start) : `${md(ev.start)}〜${md(ev.end)}`;
             const st = ev.rows.filter(id => ROW[id].group.store).map(id => ROW[id].group.name);
             const multi = st.length && ev.rows.length > 1 ? `\n${ROW[ev.rows[0]].group.store ? '共通' : '関係店舗'}：${st.join('、')}` : '';
-            bar.title = `${via ? '[' + via + '] ' : ''}${ev.title}\n${dr}${ev.src === 'calendar' ? '\nGoogleカレンダーの予定（編集はカレンダー側で）' : ''}${multi}${ev.memo ? '\n' + ev.memo : ''}`;
+            bar.title = `${via ? '[' + via + '] ' : ''}${ev.title}\n${dr}${multi}${ev.memo ? '\n' + ev.memo : ''}`;
             attachBarDrag(bar, ev, r, dw, start, days);
             tr.append(bar);
           });
@@ -700,7 +683,6 @@ dialog h2{margin:0;font-size:16px}
 
   // バーのドラッグ：横に動かすと日付、縦に動かすと同じ大カテゴリー内の行を変更。端をつかむと期間を伸縮
   function attachBarDrag(bar, ev, row, dw, start, days){
-    if (ev.src === 'calendar') { bar.onclick = e => { e.stopPropagation(); openDialog(ev); }; bar.style.cursor = 'default'; return; }
     const single = ev.rows.length === 1;
     let mode = null, sx = 0, sy = 0, moved = false, d = 0, target = null;
     const left0 = parseFloat(bar.style.left), w0 = parseFloat(bar.style.width);
@@ -820,12 +802,8 @@ dialog h2{margin:0;font-size:16px}
   }
   function openDialog(ev){
     fillRowSelect();
-    const ro = ev.src === 'calendar';
-    ['fRow','fTitle','fStart','fEnd','fMemo'].forEach(id => $(id).disabled = ro);
-    $('saveBtn').hidden = ro;
-    $('calNote').hidden = !ro;
     editing = ev.id ? ev : null;
-    $('dlgTitle').textContent = ro ? 'Googleカレンダーの予定' : editing ? '予定を編集' : '予定を追加';
+    $('dlgTitle').textContent = editing ? '予定を編集' : '予定を追加';
     let rows = ev.rows && ev.rows.length ? ev.rows : null;
     if (!rows) rows = state.stores.size ? [...state.stores].map(id => `s-${id}-sns`) : ['c-newstore'];
     const first = ROW[rows[0]];
@@ -848,7 +826,7 @@ dialog h2{margin:0;font-size:16px}
     $('fEnd').value = ev.end || ev.start || fmt(TODAY);
     $('fMemo').value = ev.memo || '';
     $('fErr').textContent = ''; $('fErr').style.color = '';
-    $('delBtn').hidden = !editing || ro;
+    $('delBtn').hidden = !editing;
     $('copyBtn').hidden = !editing;
     dlg.showModal();
     setTimeout(() => $('fTitle').focus(), 0);
