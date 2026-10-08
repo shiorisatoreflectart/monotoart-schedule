@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ものとアート 統合スケジュール</title>
+<title>リフレクトアート 全体スケジュール</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Klee+One:wght@600&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#F5F6F9; --surface:#FFFFFF; --ink:#1D2130; --muted:#697084; --line:#E2E5EC; --line-strong:#C9CED9;
@@ -34,7 +34,7 @@ button,select,input,textarea{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--c-company);outline-offset:2px}
 
 header.top{padding:14px 20px 10px;display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 24px;border-bottom:1px solid var(--line);background:var(--surface)}
-.brandmark h1{font-family:"Klee One","Zen Kaku Gothic New",serif;font-weight:600;font-size:26px;letter-spacing:.04em;margin:0;line-height:1.1}
+.brandmark h1{font-weight:900;font-size:24px;letter-spacing:.02em;margin:0;line-height:1.15}
 .brandmark p{margin:4px 0 0;color:var(--muted);font-size:12px}
 .nav{display:flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:wrap}
 .btn{border:1px solid var(--line-strong);background:var(--surface);border-radius:6px;padding:6px 12px;cursor:pointer;line-height:1.2}
@@ -101,15 +101,22 @@ label.sel select{border:1px solid var(--line-strong);border-radius:6px;padding:5
 .rlabel a{margin-left:auto;flex:none;color:var(--muted);text-decoration:none;font-size:12px;padding:0 2px;border-radius:4px}
 .rlabel a:hover{color:var(--c-company);background:var(--weekend)}
 .rlabel i{flex:none;width:8px;height:8px;border-radius:2px;background:var(--c)}
-.track{position:relative;flex:none;cursor:cell;min-height:34px}
-.bar{position:absolute;height:24px;border-radius:5px;background:var(--c);color:#fff;font-size:12px;line-height:24px;padding:0 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;z-index:1;border:0;text-align:left;box-shadow:inset 0 -2px 0 rgba(0,0,0,.15)}
+.track{position:relative;flex:none;cursor:cell;min-height:40px}
+.bar{position:absolute;height:30px;border-radius:5px;background:var(--c);color:#fff;font-size:12px;line-height:1.25;padding:3px 8px;overflow:hidden;cursor:pointer;z-index:1;border:0;text-align:left;box-shadow:inset 0 -2px 0 rgba(0,0,0,.15);display:flex;flex-direction:column;justify-content:center}
+.bar b{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.bar small{font-size:10.5px;opacity:.88;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;font-weight:400}
 .bar:hover{filter:brightness(1.08)}
 .bar{cursor:grab;touch-action:none}
 .bar.dragging{cursor:grabbing;opacity:.9;z-index:5}
 .track.droptarget{box-shadow:inset 0 0 0 2px var(--c-company)}
 .bar.cl{border-top-left-radius:0;border-bottom-left-radius:0}
 .bar.cr{border-top-right-radius:0;border-bottom-right-radius:0}
-.bar.memo::after{content:"";position:absolute;top:3px;right:3px;width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.85)}
+.bar.memo::after{content:"";position:absolute;top:4px;right:4px;width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.85)}
+.hovercard{position:fixed;z-index:60;max-width:330px;background:var(--surface);color:var(--ink);border:1px solid var(--line-strong);border-left:4px solid var(--c);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:10px 12px;pointer-events:none;font-size:12px;line-height:1.5}
+.hovercard .hc-t{font-weight:700;font-size:13px;margin-bottom:3px}
+.hovercard dl{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:0}
+.hovercard dt{color:var(--muted);white-space:nowrap}
+.hovercard dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
 .ghost{position:absolute;top:4px;bottom:4px;background:var(--ghost);border:1.5px dashed var(--c-company);border-radius:5px;pointer-events:none;z-index:2}
 .daylist{padding:18px 20px 40px;max-width:760px}
 .daylist h2{margin:0 0 4px;font-size:20px}
@@ -151,7 +158,7 @@ dialog h2{margin:0;font-size:16px}
 <body>
 <header class="top">
   <div class="brandmark">
-    <h1>ものとアート スケジュール</h1>
+    <h1>リフレクトアート 全体スケジュール</h1>
     <p>社内・店舗・ブランドの予定をまとめて確認。空いている所をクリック、またはドラッグで予定を追加できます。</p>
   </div>
   <div class="nav">
@@ -550,6 +557,7 @@ dialog h2{margin:0;font-size:16px}
   }
 
   function render(){
+    if (typeof hideHover === 'function') hideHover();
     renderControls();
     if (state.event) return renderEvent();
     if (state.day) return renderDay();
@@ -641,7 +649,7 @@ dialog h2{margin:0;font-size:16px}
           const evs = state.events.filter(e => (r.id === 'sns-all' ? e.rows.some(id => SNS_CHILD.has(id) || id === 'sns-all') : e.rows.includes(r.id)) && e.start && e.end && e.start <= eStr && e.end >= sStr);
           const placed = lanes(evs);
           const nl = Math.max(1, ...placed.map(p => p.lane + 1));
-          tr.style.height = (nl*28 + 6) + 'px';
+          tr.style.height = (nl*34 + 6) + 'px';
           placed.forEach(({ev, lane}) => {
             const a = Math.max(toUTC(ev.start), start), b = Math.min(toUTC(ev.end), end);
             const x = (a - start)/DAY*dw, w = ((b - a)/DAY + 1)*dw;
@@ -651,13 +659,15 @@ dialog h2{margin:0;font-size:16px}
             if (toUTC(ev.end) > end) bar.classList.add('cr');
             if (ev.memo) bar.classList.add('memo');
             bar.style.setProperty('--c', `var(--c-${r.color})`);
-            bar.style.left = (x + 1) + 'px'; bar.style.width = Math.max(6, w - 2) + 'px'; bar.style.top = (4 + lane*28) + 'px';
+            bar.style.left = (x + 1) + 'px'; bar.style.width = Math.max(6, w - 2) + 'px'; bar.style.top = (3 + lane*34) + 'px';
             const via = !ROW[ev.rows[0]].group.store && r.id !== ev.rows[0] ? ROW[ev.rows[0]].name : '';
-            bar.textContent = via ? `${via}｜${ev.title}` : ev.title;
             const dr = ev.start === ev.end ? md(ev.start) : `${md(ev.start)}〜${md(ev.end)}`;
             const st = ev.rows.filter(id => ROW[id].group.store).map(id => ROW[id].group.name);
-            const multi = st.length && ev.rows.length > 1 ? `\n${ROW[ev.rows[0]].group.store ? '共通' : '関係店舗'}：${st.join('、')}` : '';
-            bar.title = `${via ? '[' + via + '] ' : ''}${ev.title}\n${dr}${multi}${ev.memo ? '\n' + ev.memo : ''}`;
+            const sub = [dr, ev.memo, st.length && ev.rows.length > 1 ? `${ROW[ev.rows[0]].group.store ? '共通' : '関係店舗'}：${st.join('、')}` : ''].filter(Boolean).join('　');
+            const bt = document.createElement('b'); bt.textContent = via ? `${via}｜${ev.title}` : ev.title;
+            bar.append(bt);
+            if (w > 70) { const bs = document.createElement('small'); bs.textContent = sub; bar.append(bs); }
+            attachHover(bar, ev, r, via, dr, st);
             attachBarDrag(bar, ev, r, dw, start, days);
             tr.append(bar);
           });
@@ -680,6 +690,45 @@ dialog h2{margin:0;font-size:16px}
   }
   const md = s => { const [,m,d] = s.split('-'); return `${+m}/${+d}`; };
 
+
+  // バーにカーソルを合わせると詳細カードを表示
+  let hoverCard = null, hoverTimer = null;
+  function hideHover(){
+    clearTimeout(hoverTimer);
+    if (hoverCard) { hoverCard.remove(); hoverCard = null; }
+  }
+  function attachHover(bar, ev, r, via, dr, st){
+    bar.addEventListener('pointerenter', e => {
+      if (e.pointerType === 'touch') return;
+      clearTimeout(hoverTimer);
+      hoverTimer = setTimeout(() => showHover(bar, ev, r, via, dr, st), 180);
+    });
+    bar.addEventListener('pointerleave', hideHover);
+    bar.addEventListener('pointerdown', hideHover);
+  }
+  function showHover(bar, ev, r, via, dr, st){
+    hideHover();
+    const c = document.createElement('div');
+    c.className = 'hovercard';
+    c.style.setProperty('--c', `var(--c-${r.color})`);
+    const t = document.createElement('div'); t.className = 'hc-t'; t.textContent = ev.title;
+    const dl = document.createElement('dl');
+    const add = (k, v) => { if (!v) return; const a = document.createElement('dt'); a.textContent = k; const b = document.createElement('dd'); b.textContent = v; dl.append(a, b); };
+    const first = ROW[ev.rows[0]];
+    add('区分', via || (first.group.store ? `${first.group.name}／${first.full || first.name.replace('\n','')}` : (first.full || first.name)));
+    add('日程', ev.start === ev.end ? dr : `${dr}（${Math.round((toUTC(ev.end) - toUTC(ev.start))/DAY) + 1}日間）`);
+    if (st.length && ev.rows.length > 1) add(first.group.store ? '共通' : '関係店舗', st.join('、'));
+    add('メモ', ev.memo);
+    c.append(t, dl);
+    document.body.append(c);
+    const b = bar.getBoundingClientRect(), w = c.offsetWidth, h = c.offsetHeight;
+    let left = Math.min(Math.max(8, b.left), innerWidth - w - 8);
+    let top = b.bottom + 8;
+    if (top + h > innerHeight - 8) top = Math.max(8, b.top - h - 8);
+    c.style.left = left + 'px'; c.style.top = top + 'px';
+    hoverCard = c;
+  }
+  addEventListener('scroll', hideHover, true);
 
   // バーのドラッグ：横に動かすと日付、縦に動かすと同じ大カテゴリー内の行を変更。端をつかむと期間を伸縮
   function attachBarDrag(bar, ev, row, dw, start, days){
