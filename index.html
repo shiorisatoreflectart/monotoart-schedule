@@ -110,6 +110,7 @@ label.sel select{border:1px solid var(--line-strong);border-radius:6px;padding:5
 .newcell::after{content:"＋";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--c-company);font-size:13px;font-weight:700;line-height:1}
 .bar{cursor:grab;touch-action:none}
 .bar.dragging{cursor:grabbing;opacity:.9;z-index:5}
+.bar.saving{opacity:.55}
 .track.droptarget{box-shadow:inset 0 0 0 2px var(--c-company)}
 .bar.cl{border-top-left-radius:0;border-bottom-left-radius:0}
 .bar.cr{border-top-right-radius:0;border-bottom-right-radius:0}
@@ -133,6 +134,15 @@ label.sel select{border:1px solid var(--line-strong);border-radius:6px;padding:5
 .dayitem button{border:0;background:none;color:var(--c-company);font-size:12px;cursor:pointer;padding:0}
 .empty-hint{padding:10px 20px;color:var(--muted);font-size:12px;background:var(--surface);border-top:1px solid var(--line)}
 
+.btn.loading{position:relative;color:transparent!important;pointer-events:none}
+.btn.loading::after{content:"";position:absolute;inset:0;margin:auto;width:14px;height:14px;border:2px solid rgba(255,255,255,.45);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+.btn.loading:not(.primary)::after{border-color:var(--line-strong);border-top-color:var(--ink)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(10px);z-index:80;background:var(--ink);color:var(--surface);border-radius:999px;padding:10px 20px;font-size:13px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.25);opacity:0;transition:opacity .18s ease,transform .18s ease;pointer-events:none;display:flex;align-items:center;gap:8px}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast i{width:16px;height:16px;border-radius:50%;background:#2FA860;color:#fff;font-size:11px;line-height:16px;text-align:center;font-style:normal;flex:none}
+.toast.err i{background:var(--sun)}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}.btn.loading::after{animation-duration:2s}}
 dialog{border:0;border-radius:10px;padding:0;width:min(440px,94vw);background:var(--surface);color:var(--ink);box-shadow:0 20px 50px rgba(0,0,0,.25)}
 dialog::backdrop{background:rgba(20,22,30,.45)}
 dialog form{padding:18px 20px 16px;display:grid;gap:12px}
@@ -382,12 +392,32 @@ dialog h2{margin:0;font-size:16px}
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') load(); });
   }
 
+  // 画面下に一時的なお知らせを出す
+  let toastEl = null, toastTimer = null;
+  function toast(msg, isErr){
+    clearTimeout(toastTimer);
+    if (!toastEl) { toastEl = document.createElement('div'); document.body.append(toastEl); }
+    toastEl.className = 'toast' + (isErr ? ' err' : '');
+    toastEl.innerHTML = '';
+    const mark = document.createElement('i'); mark.textContent = isErr ? '!' : '✓';
+    toastEl.append(mark, document.createTextNode(msg));
+    requestAnimationFrame(() => toastEl.classList.add('show'));
+    toastTimer = setTimeout(() => toastEl && toastEl.classList.remove('show'), 2600);
+  }
+  function busy(btn, on){
+    btn.disabled = on;
+    btn.classList.toggle('loading', on);
+  }
+
   async function persist(ev){
     if (state.mode === 'remote') {
       const cat = labelsOf(ROW[ev.rows[0]])[0];
       const target = ev.rows.map(id => labelsOf(ROW[id])[1]).join('、');
-      await post({action:'save', event:{id:ev.id||'', cat, target, title:ev.title, start:ev.start, end:ev.end, memo:ev.memo}});
-      await load();
+      const res = await post({action:'save', event:{id:ev.id||'', cat, target, title:ev.title, start:ev.start, end:ev.end, memo:ev.memo}});
+      const saved = {...ev, id: ev.id || res.id};
+      state.events = ev.id ? state.events.map(e => e.id === ev.id ? saved : e) : state.events.concat(saved);
+      render();
+      load(); // 念のため裏で読み直す
     } else {
       if (ev.id) state.events = state.events.map(e => e.id === ev.id ? ev : e);
       else state.events.push({...ev, id: 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2,6)});
@@ -395,7 +425,12 @@ dialog h2{margin:0;font-size:16px}
     }
   }
   async function remove(id){
-    if (state.mode === 'remote') { await post({action:'delete', id}); await load(); }
+    if (state.mode === 'remote') {
+      await post({action:'delete', id});
+      state.events = state.events.filter(e => e.id !== id);
+      render();
+      load(); // 念のため裏で読み直す
+    }
     else { state.events = state.events.filter(e => e.id !== id); saveLocal(); render(); }
   }
 
@@ -781,8 +816,9 @@ dialog h2{margin:0;font-size:16px}
       else { en = mv(ev.end, shift); if (en < st) en = st; }
       const rows = to ? [to] : ev.rows;
       if (st === ev.start && en === ev.end && !to) { render(); return; }
-      try { await persist({...ev, rows, start: st, end: en}); }
-      catch (err) { setStatus(writeErr(err), true); render(); }
+      bar.classList.add('saving');
+      try { await persist({...ev, rows, start: st, end: en}); toast(to ? '行を移動しました' : '日程を変更しました'); }
+      catch (err) { toast(writeErr(err), true); render(); }
     };
     bar.addEventListener('pointerup', end);
     bar.addEventListener('pointercancel', end);
@@ -909,10 +945,11 @@ dialog h2{margin:0;font-size:16px}
     if (!ev.start || !ev.end) { $('fErr').textContent = '開始日と終了日を入力してください。'; return; }
     if (ev.end < ev.start) { $('fErr').textContent = '終了日は開始日以降にしてください。'; return; }
     if (editing) ev.id = editing.id;
-    $('saveBtn').disabled = true;
-    try { await persist(ev); dlg.close(); }
+    const wasEditing = !!editing;
+    busy($('saveBtn'), true); $('fErr').textContent = '';
+    try { await persist(ev); dlg.close(); toast(wasEditing ? '変更を保存しました' : '登録しました'); }
     catch (err) { $('fErr').textContent = writeErr(err); }
-    finally { $('saveBtn').disabled = false; }
+    finally { busy($('saveBtn'), false); }
   });
   $('copyBtn').onclick = async () => {
     if (!editing) return;
@@ -922,8 +959,10 @@ dialog h2{margin:0;font-size:16px}
   };
   $('delBtn').onclick = async () => {
     if (!editing || !confirm(`「${editing.title}」を削除しますか？`)) return;
-    try { await remove(editing.id); dlg.close(); }
+    busy($('delBtn'), true); $('fErr').textContent = '';
+    try { await remove(editing.id); dlg.close(); toast('削除しました'); }
     catch (err) { $('fErr').textContent = writeErr(err); }
+    finally { busy($('delBtn'), false); }
   };
   function writeErr(err){
     const c = err && err.code;
