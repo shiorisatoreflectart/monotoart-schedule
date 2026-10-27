@@ -102,16 +102,18 @@ label.sel select{border:1px solid var(--line-strong);border-radius:6px;padding:5
 .rlabel a:hover{color:var(--c-company);background:var(--weekend)}
 .rlabel i{flex:none;width:8px;height:8px;border-radius:2px;background:var(--c)}
 .track{position:relative;flex:none;cursor:cell;min-height:40px}
-.bar{position:absolute;height:30px;border-radius:5px;background:var(--c);color:#fff;font-size:12px;line-height:1.25;padding:3px 8px;overflow:hidden;cursor:pointer;z-index:1;border:0;text-align:left;box-shadow:inset 0 -2px 0 rgba(0,0,0,.15);display:flex;flex-direction:column;justify-content:center}
-.bar b{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
-.bar small{font-size:10.5px;opacity:.88;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;font-weight:400}
-.bar:hover{filter:brightness(1.08)}
+.bar{position:absolute;height:20px;border-radius:4px;background:var(--c);color:#fff;font-size:11.5px;line-height:20px;padding:0 7px;overflow:hidden;cursor:pointer;z-index:2;border:0;text-align:left;display:flex;align-items:baseline;gap:7px;white-space:nowrap}
+.bar b{font-weight:700;overflow:hidden;text-overflow:ellipsis;flex:none;max-width:100%}
+.bar small{font-size:10.5px;opacity:.82;overflow:hidden;text-overflow:ellipsis;font-weight:400;min-width:0}
+.bar:hover{filter:brightness(1.1);box-shadow:0 0 0 2px var(--surface),0 0 0 3.5px var(--c)}
+.newcell{position:absolute;top:2px;bottom:2px;border:1.5px dashed var(--c-company);border-radius:4px;background:var(--ghost);opacity:.75;pointer-events:none;z-index:1}
+.newcell::after{content:"＋";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--c-company);font-size:13px;font-weight:700;line-height:1}
 .bar{cursor:grab;touch-action:none}
 .bar.dragging{cursor:grabbing;opacity:.9;z-index:5}
 .track.droptarget{box-shadow:inset 0 0 0 2px var(--c-company)}
 .bar.cl{border-top-left-radius:0;border-bottom-left-radius:0}
 .bar.cr{border-top-right-radius:0;border-bottom-right-radius:0}
-.bar.memo::after{content:"";position:absolute;top:4px;right:4px;width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.85)}
+.bar.memo{box-shadow:inset -3px 0 0 rgba(255,255,255,.55)}
 .hovercard{position:fixed;z-index:60;max-width:330px;background:var(--surface);color:var(--ink);border:1px solid var(--line-strong);border-left:4px solid var(--c);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:10px 12px;pointer-events:none;font-size:12px;line-height:1.5}
 .hovercard .hc-t{font-weight:700;font-size:13px;margin-bottom:3px}
 .hovercard dl{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:0}
@@ -649,7 +651,7 @@ dialog h2{margin:0;font-size:16px}
           const evs = state.events.filter(e => (r.id === 'sns-all' ? e.rows.some(id => SNS_CHILD.has(id) || id === 'sns-all') : e.rows.includes(r.id)) && e.start && e.end && e.start <= eStr && e.end >= sStr);
           const placed = lanes(evs);
           const nl = Math.max(1, ...placed.map(p => p.lane + 1));
-          tr.style.height = (nl*34 + 6) + 'px';
+          tr.style.height = (nl*26 + 14) + 'px';
           placed.forEach(({ev, lane}) => {
             const a = Math.max(toUTC(ev.start), start), b = Math.min(toUTC(ev.end), end);
             const x = (a - start)/DAY*dw, w = ((b - a)/DAY + 1)*dw;
@@ -659,14 +661,14 @@ dialog h2{margin:0;font-size:16px}
             if (toUTC(ev.end) > end) bar.classList.add('cr');
             if (ev.memo) bar.classList.add('memo');
             bar.style.setProperty('--c', `var(--c-${r.color})`);
-            bar.style.left = (x + 1) + 'px'; bar.style.width = Math.max(6, w - 2) + 'px'; bar.style.top = (3 + lane*34) + 'px';
+            bar.style.left = (x + 1) + 'px'; bar.style.width = Math.max(6, w - 2) + 'px'; bar.style.top = (4 + lane*26) + 'px';
             const via = !ROW[ev.rows[0]].group.store && r.id !== ev.rows[0] ? ROW[ev.rows[0]].name : '';
             const dr = ev.start === ev.end ? md(ev.start) : `${md(ev.start)}〜${md(ev.end)}`;
             const st = ev.rows.filter(id => ROW[id].group.store).map(id => ROW[id].group.name);
             const sub = [dr, ev.memo, st.length && ev.rows.length > 1 ? `${ROW[ev.rows[0]].group.store ? '共通' : '関係店舗'}：${st.join('、')}` : ''].filter(Boolean).join('　');
             const bt = document.createElement('b'); bt.textContent = via ? `${via}｜${ev.title}` : ev.title;
             bar.append(bt);
-            if (w > 70) { const bs = document.createElement('small'); bs.textContent = sub; bar.append(bs); }
+            if (w > 110) { const bs = document.createElement('small'); bs.textContent = sub; bar.append(bs); }
             attachHover(bar, ev, r, via, dr, st);
             attachBarDrag(bar, ev, r, dw, start, days);
             tr.append(bar);
@@ -787,9 +789,19 @@ dialog h2{margin:0;font-size:16px}
   }
 
   function attachDrag(tr, start, dw, days, rowId){
-    let s = null, ghost = null;
+    let s = null, ghost = null, cell = null;
     const idx = e => Math.min(days-1, Math.max(0, Math.floor((e.clientX - tr.getBoundingClientRect().left) / dw)));
+    // 空いている所にカーソルを合わせると、追加できる日を点線で示す
+    const clearCell = () => { if (cell) { cell.remove(); cell = null; } };
+    tr.addEventListener('pointermove', e => {
+      if (s !== null || e.pointerType === 'touch') return;
+      if (e.target !== tr) { clearCell(); return; }
+      if (!cell) { cell = document.createElement('div'); cell.className = 'newcell'; tr.append(cell); }
+      cell.style.left = idx(e)*dw + 'px'; cell.style.width = dw + 'px';
+    });
+    tr.addEventListener('pointerleave', clearCell);
     tr.addEventListener('pointerdown', e => {
+      clearCell();
       if (e.target !== tr || e.button !== 0 || state.readOnly) return;
       s = idx(e); tr.setPointerCapture(e.pointerId);
       ghost = document.createElement('div'); ghost.className = 'ghost';
