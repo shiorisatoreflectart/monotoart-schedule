@@ -115,7 +115,10 @@ label.sel select{border:1px solid var(--line-strong);border-radius:6px;padding:5
 .bar.cl{border-top-left-radius:0;border-bottom-left-radius:0}
 .bar.cr{border-top-right-radius:0;border-bottom-right-radius:0}
 .bar.memo{box-shadow:inset -3px 0 0 rgba(255,255,255,.55)}
-.hovercard{position:fixed;z-index:60;max-width:330px;background:var(--surface);color:var(--ink);border:1px solid var(--line-strong);border-left:4px solid var(--c);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:10px 12px;pointer-events:none;font-size:12px;line-height:1.5}
+.hovercard{position:fixed;z-index:60;max-width:330px;background:var(--surface);color:var(--ink);border:1px solid var(--line-strong);border-left:4px solid var(--c);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:10px 12px;font-size:12px;line-height:1.5}
+.memo-link{color:#2563eb;text-decoration:underline;word-break:break-all}
+.memo-links{display:flex;flex-direction:column;gap:2px;margin-top:4px;font-size:12px}
+.memo-links:empty{display:none}
 .hovercard .hc-t{font-weight:700;font-size:13px;margin-bottom:3px}
 .hovercard dl{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:0}
 .hovercard dt{color:var(--muted);white-space:nowrap}
@@ -205,6 +208,7 @@ dialog h2{margin:0;font-size:16px}
       <label class="f"><span>終了日</span><input type="date" id="fEnd" required></label>
     </div>
     <label class="f"><span>メモ（任意）</span><textarea id="fMemo" maxlength="500" placeholder="担当者、投稿時間、搬入時間など"></textarea></label>
+    <div class="memo-links" id="fMemoLinks"></div>
     <p class="err" id="fErr"></p>
     <div class="actions">
       <button type="button" class="btn danger" id="delBtn" hidden>削除</button>
@@ -520,7 +524,7 @@ dialog h2{margin:0;font-size:16px}
       const dot = document.createElement('i');
       const bd = document.createElement('div'); bd.className = 'b';
       const m = document.createElement('div'); m.className = 'm';
-      m.textContent = eventText(ev).split('\n').slice(1).join('\n');
+      linkify(m, eventText(ev).split('\n').slice(1).join('\n'));
       const where = document.createElement('div'); where.className = 't';
       where.textContent = r.group.store ? `${r.group.name}／${r.full || r.name.replace('\n','')}` : (r.full || r.name);
       bd.append(where, m);
@@ -573,7 +577,7 @@ dialog h2{margin:0;font-size:16px}
         const where = g.store ? `${g.name}／${r.full || r.name.replace('\n','')}` : (r.full || r.name);
         const span = ev.start === ev.end ? '' : `　${md(ev.start)}〜${md(ev.end)}`;
         const stores = ev.rows.filter(id => ROW[id].group.store).map(id => ROW[id].group.name);
-        meta.textContent = where + span + (stores.length > 1 ? `　関係店舗：${stores.join('、')}` : '') + (ev.memo ? `\n${ev.memo}` : '');
+        linkify(meta, where + span + (stores.length > 1 ? `　関係店舗：${stores.join('、')}` : '') + (ev.memo ? `\n${ev.memo}` : ''));
         b.append(ti, meta);
         const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = '編集';
         edit.onclick = () => openDialog(ev); b.append(edit);
@@ -727,12 +731,27 @@ dialog h2{margin:0;font-size:16px}
     }
   }
   const md = s => { const [,m,d] = s.split('-'); return `${+m}/${+d}`; };
+  // メモ内のURLをクリックできるリンクにする
+  const URL_RE = /https?:\/\/[^\s<>"'「」、。）)]+/g;
+  function linkify(el, text){
+    el.textContent = '';
+    let last = 0;
+    String(text || '').replace(URL_RE, (u, i) => {
+      el.append(document.createTextNode(text.slice(last, i)));
+      const a = document.createElement('a');
+      a.href = u; a.textContent = u; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.className = 'memo-link';
+      a.addEventListener('pointerdown', e => e.stopPropagation());
+      el.append(a); last = i + u.length; return u;
+    });
+    el.append(document.createTextNode(String(text || '').slice(last)));
+    return el;
+  }
 
 
   // バーにカーソルを合わせると詳細カードを表示
-  let hoverCard = null, hoverTimer = null;
+  let hoverCard = null, hoverTimer = null, leaveTimer = null;
   function hideHover(){
-    clearTimeout(hoverTimer);
+    clearTimeout(hoverTimer); clearTimeout(leaveTimer);
     if (hoverCard) { hoverCard.remove(); hoverCard = null; }
   }
   function attachHover(bar, ev, r, via, dr, st){
@@ -741,7 +760,7 @@ dialog h2{margin:0;font-size:16px}
       clearTimeout(hoverTimer);
       hoverTimer = setTimeout(() => showHover(bar, ev, r, via, dr, st), 180);
     });
-    bar.addEventListener('pointerleave', hideHover);
+    bar.addEventListener('pointerleave', () => { clearTimeout(hoverTimer); clearTimeout(leaveTimer); leaveTimer = setTimeout(hideHover, 300); });
     bar.addEventListener('pointerdown', hideHover);
   }
   function showHover(bar, ev, r, via, dr, st){
@@ -751,13 +770,15 @@ dialog h2{margin:0;font-size:16px}
     c.style.setProperty('--c', `var(--c-${r.color})`);
     const t = document.createElement('div'); t.className = 'hc-t'; t.textContent = ev.title;
     const dl = document.createElement('dl');
-    const add = (k, v) => { if (!v) return; const a = document.createElement('dt'); a.textContent = k; const b = document.createElement('dd'); b.textContent = v; dl.append(a, b); };
+    const add = (k, v) => { if (!v) return; const a = document.createElement('dt'); a.textContent = k; const b = document.createElement('dd'); linkify(b, v); dl.append(a, b); };
     const first = ROW[ev.rows[0]];
     add('区分', via || (first.group.store ? `${first.group.name}／${first.full || first.name.replace('\n','')}` : (first.full || first.name)));
     add('日程', ev.start === ev.end ? dr : `${dr}（${Math.round((toUTC(ev.end) - toUTC(ev.start))/DAY) + 1}日間）`);
     if (st.length && ev.rows.length > 1) add(first.group.store ? '共通' : '関係店舗', st.join('、'));
     add('メモ', ev.memo);
     c.append(t, dl);
+    c.addEventListener('pointerenter', () => clearTimeout(leaveTimer));
+    c.addEventListener('pointerleave', hideHover);
     document.body.append(c);
     const b = bar.getBoundingClientRect(), w = c.offsetWidth, h = c.offsetHeight;
     let left = Math.min(Math.max(8, b.left), innerWidth - w - 8);
@@ -923,6 +944,7 @@ dialog h2{margin:0;font-size:16px}
     $('fStart').value = ev.start || fmt(TODAY);
     $('fEnd').value = ev.end || ev.start || fmt(TODAY);
     $('fMemo').value = ev.memo || '';
+    syncMemoLinks();
     $('fErr').textContent = ''; $('fErr').style.color = '';
     $('delBtn').hidden = !editing;
     $('copyBtn').hidden = !editing;
@@ -930,6 +952,11 @@ dialog h2{margin:0;font-size:16px}
     setTimeout(() => $('fTitle').focus(), 0);
   }
   $('fStart').addEventListener('change', () => { if ($('fEnd').value < $('fStart').value) $('fEnd').value = $('fStart').value; });
+  function syncMemoLinks(){
+    const box = $('fMemoLinks'); box.textContent = '';
+    ($('fMemo').value.match(URL_RE) || []).forEach(u => box.append(linkify(document.createElement('div'), u)));
+  }
+  $('fMemo').addEventListener('input', syncMemoLinks);
   $('cancelBtn').onclick = () => dlg.close();
   $('form').addEventListener('submit', async e => {
     e.preventDefault();
