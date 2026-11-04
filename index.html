@@ -157,6 +157,7 @@ dialog h2{margin:0;font-size:16px}
 .pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .actions{display:flex;gap:8px;align-items:center;margin-top:4px}
 .actions .sp{flex:1}
+.rep-note{margin:-4px 0 0;font-size:12px;color:var(--muted)}
 .err{color:var(--sun);font-size:12px;min-height:1em;margin:0}
 
 @media (max-width:640px){
@@ -207,6 +208,18 @@ dialog h2{margin:0;font-size:16px}
       <label class="f"><span>開始日</span><input type="date" id="fStart" required></label>
       <label class="f"><span>終了日</span><input type="date" id="fEnd" required></label>
     </div>
+    <div class="pair" id="fRepeatWrap">
+      <label class="f"><span>繰り返し</span><select id="fRepeat">
+        <option value="">しない</option>
+        <option value="day">毎日</option>
+        <option value="weekday">毎日（平日のみ）</option>
+        <option value="week">毎週（同じ曜日）</option>
+        <option value="week2">隔週（同じ曜日）</option>
+        <option value="month">毎月（同じ日）</option>
+      </select></label>
+      <label class="f" id="fUntilWrap" hidden><span>いつまで</span><input type="date" id="fUntil"></label>
+    </div>
+    <p class="rep-note" id="fRepeatNote" hidden></p>
     <label class="f"><span>メモ（任意）</span><textarea id="fMemo" maxlength="500" placeholder="担当者、投稿時間、搬入時間など"></textarea></label>
     <div class="memo-links" id="fMemoLinks"></div>
     <p class="err" id="fErr"></p>
@@ -427,6 +440,18 @@ dialog h2{margin:0;font-size:16px}
       if (ev.id) state.events = state.events.map(e => e.id === ev.id ? ev : e);
       else state.events.push({...ev, id: 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2,6)});
       saveLocal(); render();
+    }
+  }
+  // 繰り返し登録用：1件ずつ保存し、読み直しは最後にまとめて行う
+  async function persistQuiet(ev){
+    if (state.mode === 'remote') {
+      const cat = labelsOf(ROW[ev.rows[0]])[0];
+      const target = ev.rows.map(id => labelsOf(ROW[id])[1]).join('、');
+      const res = await post({action:'save', event:{id:'', cat, target, title:ev.title, start:ev.start, end:ev.end, memo:ev.memo}});
+      state.events = state.events.concat({...ev, id: res.id});
+    } else {
+      state.events.push({...ev, id: 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2,6)});
+      saveLocal();
     }
   }
   async function remove(id){
@@ -948,10 +973,55 @@ dialog h2{margin:0;font-size:16px}
     $('fErr').textContent = ''; $('fErr').style.color = '';
     $('delBtn').hidden = !editing;
     $('copyBtn').hidden = !editing;
+    $('fRepeatWrap').hidden = !!editing; // 繰り返しは新規登録のときだけ
+    $('fRepeat').value = ''; $('fUntil').value = ''; syncRepeat();
     dlg.showModal();
     setTimeout(() => $('fTitle').focus(), 0);
   }
-  $('fStart').addEventListener('change', () => { if ($('fEnd').value < $('fStart').value) $('fEnd').value = $('fStart').value; });
+  $('fStart').addEventListener('change', () => { if ($('fEnd').value < $('fStart').value) $('fEnd').value = $('fStart').value; syncRepeat(); });
+  $('fEnd').addEventListener('change', syncRepeat);
+
+  // ---------- 繰り返し ----------
+  const REPEAT_MAX = 120;
+  // 開始日〜終了日の長さを保ったまま、繰り返しの日付一覧を作る
+  function repeatDates(kind, start, end, until){
+    if (!kind || !until || until < start) return [{start, end}];
+    const s0 = toUTC(start), len = toUTC(end) - s0, u = toUTC(until);
+    const out = [];
+    const sd = new Date(s0), dom = sd.getUTCDate();
+    for (let i = 0; out.length < REPEAT_MAX + 1; i++) {
+      let t;
+      if (kind === 'day' || kind === 'weekday') t = s0 + i * DAY;
+      else if (kind === 'week') t = s0 + i * 7 * DAY;
+      else if (kind === 'week2') t = s0 + i * 14 * DAY;
+      else if (kind === 'month') {
+        const y = sd.getUTCFullYear(), m = sd.getUTCMonth() + i;
+        const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+        t = Date.UTC(y, m, Math.min(dom, last)); // 31日→月末に合わせる
+      }
+      if (t > u) break;
+      if (kind === 'weekday') { const wd = new Date(t).getUTCDay(); if (wd === 0 || wd === 6) continue; }
+      out.push({start: fmt(t), end: fmt(t + len)});
+    }
+    return out;
+  }
+  function syncRepeat(){
+    const kind = $('fRepeat').value;
+    $('fUntilWrap').hidden = !kind;
+    const note = $('fRepeatNote');
+    if (!kind) { note.hidden = true; return; }
+    if (!$('fUntil').value || $('fUntil').value < $('fStart').value) {
+      const d = new Date(toUTC($('fStart').value || fmt(TODAY)));
+      $('fUntil').value = fmt(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + (kind === 'month' ? 6 : 1), d.getUTCDate()));
+    }
+    const n = repeatDates(kind, $('fStart').value, $('fEnd').value, $('fUntil').value).length;
+    note.hidden = false;
+    note.style.color = n > REPEAT_MAX ? 'var(--sun)' : '';
+    note.textContent = n > REPEAT_MAX ? `回数が多すぎます（${REPEAT_MAX}回まで）。「いつまで」を短くしてください。`
+      : `${n}件の予定として登録されます（あとから1件ずつ編集・削除できます）`;
+  }
+  $('fRepeat').addEventListener('change', syncRepeat);
+  $('fUntil').addEventListener('change', syncRepeat);
   function syncMemoLinks(){
     const box = $('fMemoLinks'); box.textContent = '';
     ($('fMemo').value.match(URL_RE) || []).forEach(u => box.append(linkify(document.createElement('div'), u)));
@@ -974,6 +1044,27 @@ dialog h2{margin:0;font-size:16px}
     if (ev.end < ev.start) { $('fErr').textContent = '終了日は開始日以降にしてください。'; return; }
     if (editing) ev.id = editing.id;
     const wasEditing = !!editing;
+    const rep = editing ? '' : $('fRepeat').value;
+    if (rep) {
+      if (!$('fUntil').value || $('fUntil').value < ev.start) { $('fErr').textContent = '「いつまで」は開始日以降にしてください。'; return; }
+      const list = repeatDates(rep, ev.start, ev.end, $('fUntil').value);
+      if (list.length > REPEAT_MAX) { $('fErr').textContent = `繰り返しは${REPEAT_MAX}回までです。「いつまで」を短くしてください。`; return; }
+      busy($('saveBtn'), true); $('fErr').textContent = '';
+      let done = 0;
+      try {
+        for (const d of list) {
+          await persistQuiet({...ev, start: d.start, end: d.end});
+          done++;
+          $('fErr').style.color = 'var(--muted)'; $('fErr').textContent = `登録中… ${done}/${list.length}`;
+        }
+        $('fErr').style.color = ''; $('fErr').textContent = '';
+        dlg.close(); toast(`${done}件登録しました`);
+      } catch (err) {
+        $('fErr').style.color = '';
+        $('fErr').textContent = (done ? `${done}件まで登録しました。残りは` : '') + writeErr(err);
+      } finally { busy($('saveBtn'), false); render(); if (state.mode === 'remote') load(); }
+      return;
+    }
     busy($('saveBtn'), true); $('fErr').textContent = '';
     try { await persist(ev); dlg.close(); toast(wasEditing ? '変更を保存しました' : '登録しました'); }
     catch (err) { $('fErr').textContent = writeErr(err); }
