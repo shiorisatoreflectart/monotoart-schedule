@@ -108,8 +108,7 @@ label.sel select{border:1px solid var(--line-strong);border-radius:6px;padding:5
 .bar:hover{filter:brightness(1.1);box-shadow:0 0 0 2px var(--surface),0 0 0 3.5px var(--c)}
 .newcell{position:absolute;top:2px;bottom:2px;border:1.5px dashed var(--c-company);border-radius:4px;background:var(--ghost);opacity:.75;pointer-events:none;z-index:1}
 .newcell::after{content:"＋";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--c-company);font-size:13px;font-weight:700;line-height:1}
-.bar{cursor:grab;touch-action:none}
-.bar.dragging{cursor:grabbing;opacity:.9;z-index:5}
+.bar{cursor:pointer}
 .bar.saving{opacity:.55}
 .track.droptarget{box-shadow:inset 0 0 0 2px var(--c-company)}
 .bar.cl{border-top-left-radius:0;border-bottom-left-radius:0}
@@ -814,61 +813,11 @@ dialog h2{margin:0;font-size:16px}
   }
   addEventListener('scroll', hideHover, true);
 
-  // バーのドラッグ：横に動かすと日付、縦に動かすと同じ大カテゴリー内の行を変更。端をつかむと期間を伸縮
-  function attachBarDrag(bar, ev, row, dw, start, days){
-    const single = ev.rows.length === 1;
-    let mode = null, sx = 0, sy = 0, moved = false, d = 0, target = null;
-    const left0 = parseFloat(bar.style.left), w0 = parseFloat(bar.style.width);
-    const edge = e => { const r = bar.getBoundingClientRect(); return w0 > 26 && (e.clientX - r.left < 9 ? 'l' : r.right - e.clientX < 9 ? 'r' : 'm') || 'm'; };
-    bar.addEventListener('pointermove', e => { if (!mode) bar.style.cursor = edge(e) === 'm' ? 'grab' : 'ew-resize'; });
-    bar.addEventListener('pointerdown', e => {
-      if (e.button !== 0) return;
-      e.stopPropagation(); e.preventDefault();
-      mode = edge(e); sx = e.clientX; sy = e.clientY; moved = false; d = 0; target = null;
-      bar.setPointerCapture(e.pointerId); bar.classList.add('dragging');
-    });
-    bar.addEventListener('pointermove', e => {
-      if (!mode) return;
-      const dx = e.clientX - sx, dy = e.clientY - sy;
-      if (!moved && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
-      moved = true;
-      d = Math.round(dx / dw);
-      if (mode === 'm') {
-        bar.style.left = (left0 + d * dw) + 'px';
-        document.querySelectorAll('.track.droptarget').forEach(t => t.classList.remove('droptarget'));
-        target = null;
-        if (single) {
-          const tr = document.elementsFromPoint(e.clientX, e.clientY).find(el => el.classList && el.classList.contains('track'));
-          const id = tr && tr.dataset.row;
-          if (id && id !== row.id && ROW[id].sec === ROW[row.id].sec) { target = id; tr.classList.add('droptarget'); }
-        }
-      } else if (mode === 'l') {
-        bar.style.left = (left0 + d * dw) + 'px';
-        bar.style.width = Math.max(6, w0 - d * dw) + 'px';
-      } else {
-        bar.style.width = Math.max(6, w0 + d * dw) + 'px';
-      }
-    });
-    const end = async e => {
-      if (!mode) return;
-      const wasMoved = moved, m = mode, shift = d, to = target;
-      mode = null; bar.classList.remove('dragging');
-      document.querySelectorAll('.track.droptarget').forEach(t => t.classList.remove('droptarget'));
-      if (!wasMoved) { openDialog(ev); return; }
-      if (e.type !== 'pointerup') { render(); return; }
-      const mv = (s0, n) => fmt(toUTC(s0) + n * DAY);
-      let st = ev.start, en = ev.end;
-      if (m === 'm') { st = mv(ev.start, shift); en = mv(ev.end, shift); }
-      else if (m === 'l') { st = mv(ev.start, shift); if (st > en) st = en; }
-      else { en = mv(ev.end, shift); if (en < st) en = st; }
-      const rows = to ? [to] : ev.rows;
-      if (st === ev.start && en === ev.end && !to) { render(); return; }
-      bar.classList.add('saving');
-      try { await persist({...ev, rows, start: st, end: en}); toast(to ? '行を移動しました' : '日程を変更しました'); }
-      catch (err) { toast(writeErr(err), true); render(); }
-    };
-    bar.addEventListener('pointerup', end);
-    bar.addEventListener('pointercancel', end);
+  // バーをクリックすると編集ダイアログを開く（ドラッグでの移動はなし）
+  function attachBarDrag(bar, ev){
+    bar.style.cursor = 'pointer';
+    bar.addEventListener('pointerdown', e => { if (e.button === 0) e.stopPropagation(); });
+    bar.addEventListener('click', e => { e.stopPropagation(); openDialog(ev); });
   }
 
   function attachDrag(tr, start, dw, days, rowId){
